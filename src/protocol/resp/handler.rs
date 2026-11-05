@@ -1,4 +1,3 @@
-use bytes::BytesMut;
 use std::sync::Arc;
 use crate::engine::StorageEngine;
 use crate::protocol::resp::parser::RespCommand;
@@ -13,7 +12,7 @@ impl RespHandler {
         Self { engine }
     }
 
-    pub fn handle_command(&self, cmd: RespCommand, out: &mut BytesMut) {
+    pub fn handle_command(&self, cmd: RespCommand, out: &mut Vec<u8>) {
         match cmd {
             RespCommand::Ping(arg) => {
                 RespWriter::write_pong(out, arg.as_deref());
@@ -175,6 +174,14 @@ impl RespHandler {
                         RespWriter::write_error(out, "ERR unknown TIER subcommand");
                     }
                 }
+            }
+            RespCommand::Config(_args) => {
+                RespWriter::write_array_header(out, 2);
+                RespWriter::write_bulk_string(out, b"save");
+                RespWriter::write_bulk_string(out, b"");
+            }
+            RespCommand::Client | RespCommand::Auth => {
+                RespWriter::write_ok(out);
             }
             RespCommand::Cluster(args) => {
                 if args.is_empty() {

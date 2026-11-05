@@ -29,43 +29,34 @@ impl SccIndex {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn get(&self, key: &[u8]) -> Option<ValueEntry> {
-        let now_ms = current_time_millis();
-        let now_secs = (now_ms / 1000) as u32;
-
         let mut expired = false;
         let result = self.map.read_sync(key, |_k, entry| {
-            if entry.is_expired(now_ms) {
-                expired = true;
-                None
-            } else {
-                Some(entry.clone())
+            if let Some(exp) = entry.expire_at_ms {
+                let now_ms = current_time_millis();
+                if now_ms >= exp {
+                    expired = true;
+                    return None;
+                }
             }
+            Some(entry.clone())
         }).flatten();
 
         if expired {
             let _ = self.remove(key);
             None
-        } else if let Some(mut entry) = result {
-            entry.touch(now_secs);
-            Some(entry)
         } else {
-            None
+            result
         }
     }
 
-    #[inline]
-    pub fn insert(&self, key: Bytes, entry: ValueEntry) -> Option<ValueEntry> {
-        let prev = self.map.read_sync(key.as_ref(), |_k, v| v.clone());
+    #[inline(always)]
+    pub fn insert(&self, key: Bytes, entry: ValueEntry) {
         let _ = self.map.upsert_sync(key, entry);
-        if prev.is_none() {
-            self.count.fetch_add(1, Ordering::Relaxed);
-        }
-        prev
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn remove(&self, key: &[u8]) -> Option<ValueEntry> {
         let removed = self.map.remove_sync(key).map(|entry| entry.1);
         if removed.is_some() {
@@ -74,18 +65,23 @@ impl SccIndex {
         removed
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn contains_key(&self, key: &[u8]) -> bool {
-        let now_ms = current_time_millis();
-        self.map.read_sync(key, |_k, v| !v.is_expired(now_ms)).unwrap_or(false)
+        self.map.read_sync(key, |_k, v| {
+            if let Some(exp) = v.expire_at_ms {
+                current_time_millis() < exp
+            } else {
+                true
+            }
+        }).unwrap_or(false)
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn len(&self) -> usize {
         self.map.len()
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn is_empty(&self) -> bool {
         self.map.is_empty()
     }

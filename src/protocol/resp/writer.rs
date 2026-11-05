@@ -3,68 +3,78 @@ use bytes::BytesMut;
 pub struct RespWriter;
 
 impl RespWriter {
-    #[inline]
-    pub fn write_ok(buf: &mut BytesMut) {
+    #[inline(always)]
+    pub fn write_ok(buf: &mut Vec<u8>) {
         buf.extend_from_slice(b"+OK\r\n");
     }
 
-    #[inline]
-    pub fn write_pong(buf: &mut BytesMut, arg: Option<&[u8]>) {
+    #[inline(always)]
+    pub fn write_pong(buf: &mut Vec<u8>, arg: Option<&[u8]>) {
         match arg {
             Some(msg) => Self::write_bulk_string(buf, msg),
             None => buf.extend_from_slice(b"+PONG\r\n"),
         }
     }
 
-    #[inline]
-    pub fn write_simple_string(buf: &mut BytesMut, s: &str) {
+    #[inline(always)]
+    pub fn write_simple_string(buf: &mut Vec<u8>, s: &str) {
         buf.extend_from_slice(b"+");
         buf.extend_from_slice(s.as_bytes());
         buf.extend_from_slice(b"\r\n");
     }
 
-    #[inline]
-    pub fn write_error(buf: &mut BytesMut, err: &str) {
+    #[inline(always)]
+    pub fn write_error(buf: &mut Vec<u8>, err: &str) {
         buf.extend_from_slice(b"-");
         buf.extend_from_slice(err.as_bytes());
         buf.extend_from_slice(b"\r\n");
     }
 
-    #[inline]
-    pub fn write_integer(buf: &mut BytesMut, val: i64) {
+    #[inline(always)]
+    pub fn write_integer(buf: &mut Vec<u8>, val: i64) {
         buf.extend_from_slice(b":");
-        buf.extend_from_slice(val.to_string().as_bytes());
+        let mut itoa_buf = itoa::Buffer::new();
+        buf.extend_from_slice(itoa_buf.format(val).as_bytes());
         buf.extend_from_slice(b"\r\n");
     }
 
-    #[inline]
-    pub fn write_bulk_string(buf: &mut BytesMut, data: &[u8]) {
+    #[inline(always)]
+    pub fn write_bulk_string(buf: &mut Vec<u8>, data: &[u8]) {
         buf.extend_from_slice(b"$");
-        buf.extend_from_slice(data.len().to_string().as_bytes());
+        let mut itoa_buf = itoa::Buffer::new();
+        buf.extend_from_slice(itoa_buf.format(data.len()).as_bytes());
         buf.extend_from_slice(b"\r\n");
         buf.extend_from_slice(data);
         buf.extend_from_slice(b"\r\n");
     }
 
-    #[inline]
-    pub fn write_null(buf: &mut BytesMut) {
+    #[inline(always)]
+    pub fn write_null(buf: &mut Vec<u8>) {
         buf.extend_from_slice(b"$-1\r\n");
     }
 
-    #[inline]
-    pub fn write_array_header(buf: &mut BytesMut, len: usize) {
+    #[inline(always)]
+    pub fn write_array_header(buf: &mut Vec<u8>, len: usize) {
         buf.extend_from_slice(b"*");
-        buf.extend_from_slice(len.to_string().as_bytes());
+        let mut itoa_buf = itoa::Buffer::new();
+        buf.extend_from_slice(itoa_buf.format(len).as_bytes());
         buf.extend_from_slice(b"\r\n");
     }
 
-    #[inline]
-    pub fn write_moved(buf: &mut BytesMut, slot: u16, addr: &str) {
+    #[inline(always)]
+    pub fn write_moved(buf: &mut Vec<u8>, slot: u16, addr: &str) {
         buf.extend_from_slice(b"-MOVED ");
-        buf.extend_from_slice(slot.to_string().as_bytes());
+        let mut itoa_buf = itoa::Buffer::new();
+        buf.extend_from_slice(itoa_buf.format(slot).as_bytes());
         buf.extend_from_slice(b" ");
         buf.extend_from_slice(addr.as_bytes());
         buf.extend_from_slice(b"\r\n");
+    }
+
+    // Compatibility adapter for BytesMut if needed
+    #[inline(always)]
+    pub fn write_ok_bytes_mut(buf: &mut BytesMut) {
+        buf.extend_from_slice(b"+OK\r\n");
     }
 }
 
@@ -74,7 +84,7 @@ mod tests {
 
     #[test]
     fn test_resp_writer() {
-        let mut buf = BytesMut::new();
+        let mut buf = Vec::new();
         RespWriter::write_ok(&mut buf);
         assert_eq!(&buf[..], b"+OK\r\n");
 

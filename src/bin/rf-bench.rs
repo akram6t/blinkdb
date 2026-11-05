@@ -40,7 +40,24 @@ struct BenchArgs {
     data_size: usize,
 
     #[arg(long, default_value = "1:1")]
-    ratio: String, // "1:1" = 50% SET, 50% GET
+    ratio: String, // "1:1", "1:4" (80% GET), "get", "set"
+
+    #[arg(long, default_value_t = 50_000)]
+    keyspace: usize,
+}
+
+fn parse_ratio(ratio_str: &str) -> (u32, u32) {
+    if ratio_str.eq_ignore_ascii_case("get") || ratio_str == "0:1" {
+        (0, 1)
+    } else if ratio_str.eq_ignore_ascii_case("set") || ratio_str == "1:0" {
+        (1, 0)
+    } else if let Some((s, g)) = ratio_str.split_once(':') {
+        let s_val = s.parse::<u32>().unwrap_or(1);
+        let g_val = g.parse::<u32>().unwrap_or(1);
+        (s_val, g_val)
+    } else {
+        (1, 1)
+    }
 }
 
 fn main() {
@@ -48,6 +65,17 @@ fn main() {
 
     let default_port = if args.protocol == "binary" { 7379 } else { 6379 };
     let port = if args.port == 0 { default_port } else { args.port };
+
+    let (set_w, get_w) = parse_ratio(&args.ratio);
+    let total_w = set_w + get_w;
+
+    let ratio_display = if set_w == 0 {
+        "100% GET (Read-Only)".to_string()
+    } else if get_w == 0 {
+        "100% SET (Write-Only)".to_string()
+    } else {
+        format!("{:.1}% SET, {:.1}% GET", (set_w as f64 / total_w as f64) * 100.0, (get_w as f64 / total_w as f64) * 100.0)
+    };
 
     println!("============================================================");
     println!(" RustForge Benchmark Client ");
@@ -59,8 +87,44 @@ fn main() {
     println!("Client Threads:     {}", args.threads);
     println!("Pipeline Depth:     {}", args.pipeline);
     println!("Payload Size:       {} bytes", args.data_size);
-    println!("SET:GET Ratio:      {}", args.ratio);
+    println!("Keyspace:           {} keys", args.keyspace);
+    println!("Workload Profile:   {}", ratio_display);
     println!("============================================================");
+
+    // Warm-up / Pre-seed keyspace if GET is involved
+    if get_w > 0 && set_w == 0 {
+        print!("[*] Pre-populating keyspace with {} keys... ", args.keyspace.min(20_000));
+        let _ = std::io::stdout().flush();
+        if let Ok(mut stream) = TcpStream::connect(format!("{}:{}", args.host, port)) {
+            let _ = stream.set_nodelay(true);
+            let val_payload = "x".repeat(args.data_size);
+            let seed_count = args.keyspace.min(20_000);
+            let mut seed_buf = Vec::with_capacity(seed_count * (args.data_size + 64));
+            for i in 0..seed_count {
+                let k = format!("bench:key:{:07}", i);
+                if args.protocol == "binary" {
+                    let req = BinaryRequest {
+                        opcode: OP_SET,
+                        flags: 0,
+                        req_id: i as u32,
+                        ttl_secs: 0,
+                        key: bytes::Bytes::copy_from_slice(k.as_bytes()),
+                        value: bytes::Bytes::copy_from_slice(val_payload.as_bytes()),
+                    };
+                    req.encode(&mut seed_buf);
+                } else {
+                    seed_buf.extend_from_slice(
+                        format!("*3\r\n$3\r\nSET\r\n${}\r\n{}\r\n${}\r\n{}\r\n",
+                            k.len(), k, val_payload.len(), val_payload).as_bytes()
+                    );
+                }
+            }
+            let _ = stream.write_all(&seed_buf);
+            let mut tmp = vec![0u8; 16384];
+            let _ = stream.read(&mut tmp);
+            println!("Done.");
+        }
+    }
 
     let completed_reqs = Arc::new(AtomicU64::new(0));
     let total_bytes = Arc::new(AtomicU64::new(0));
@@ -82,6 +146,7 @@ fn main() {
         let hist = histogram.clone();
         let pipe_depth = args.pipeline.max(1);
         let d_size = args.data_size;
+        let keyspace = args.keyspace.max(1);
 
         let num_clients_this_thread = if (t_idx + 1) * clients_per_thread <= args.clients {
             clients_per_thread
@@ -123,8 +188,14 @@ fn main() {
                     let req_start = Instant::now();
 
                     for _ in 0..batch_size {
-                        let key = format!("bench:key:{:07}", req_counter % 50_000);
-                        let is_set = (req_counter % 2) == 0;
+                        let key = format!("bench:key:{:07}", req_counter % keyspace);
+                        let is_set = if total_w == 0 || get_w == 0 {
+                            true
+                        } else if set_w == 0 {
+                            false
+                        } else {
+                            ((req_counter as u32) % total_w) < set_w
+                        };
 
                         if proto == "binary" {
                             let (op, val) = if is_set {
@@ -179,7 +250,6 @@ fn main() {
                         bytes_acc.fetch_add(n as u64, Ordering::Relaxed);
 
                         if proto == "binary" {
-                            // Parse binary headers
                             let mut offset = 0;
                             while offset + RESP_HEADER_SIZE <= n {
                                 if resp_buf[offset..offset + 2] == RF_MAGIC {
@@ -193,7 +263,6 @@ fn main() {
                                 }
                             }
                         } else {
-                            // Count RESP responses by counting prefixes
                             for &b in &resp_buf[..n] {
                                 if b == b'+' || b == b'$' || b == b':' || b == b'-' {
                                     responses_read += 1;
@@ -235,7 +304,7 @@ fn main() {
     println!("\n================ Benchmark Results ================");
     println!("Total Requests:     {}", total_done);
     println!("Elapsed Time:       {:.3} seconds", elapsed.as_secs_f64());
-    println!("Throughput:         {:.2} req/sec", qps);
+    println!("Throughput:         {:.2} ops/sec", qps);
     println!("Bandwidth:          {:.2} MB/sec", mb_per_sec);
     println!("---------------- Latency Summary ------------------");
     println!("Min:                {:.3} ms", (hist.min() as f64) / 1000.0);

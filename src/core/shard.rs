@@ -1,6 +1,5 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
-use bytes::BytesMut;
 use log::{error, info};
 use monoio::io::{AsyncReadRent, AsyncWriteRentExt};
 use monoio::net::{TcpListener, TcpStream};
@@ -36,6 +35,14 @@ impl ShardWorker {
 
         rt.block_on(async move {
             info!("Shard {} running on CPU core {} with io_uring", self.shard_id, self.core_id);
+
+            // Lightweight timer to update cached timestamp every 10ms (zero syscalls on hot path)
+            monoio::spawn(async {
+                loop {
+                    crate::engine::update_cached_time();
+                    monoio::time::sleep(std::time::Duration::from_millis(10)).await;
+                }
+            });
 
             let io_backend = MonoioEngine::new();
 
@@ -81,6 +88,7 @@ impl ShardWorker {
                 loop {
                     match resp_listener.accept().await {
                         Ok((stream, _peer_addr)) => {
+                            let _ = stream.set_nodelay(true);
                             let h = handler.clone();
                             let r = router_resp.clone();
                             monoio::spawn(async move {
@@ -102,6 +110,7 @@ impl ShardWorker {
                 loop {
                     match bin_listener.accept().await {
                         Ok((stream, _peer_addr)) => {
+                            let _ = stream.set_nodelay(true);
                             let h = handler.clone();
                             monoio::spawn(async move {
                                 Self::handle_binary_connection(stream, h).await;
@@ -127,9 +136,10 @@ impl ShardWorker {
         handler: Arc<RespHandler>,
         router: Option<ClusterRouter>,
     ) {
+        let _ = stream.set_nodelay(true);
         let mut read_buf = vec![0u8; 16384];
-        let mut read_len = 0;
-        let mut out_buf = BytesMut::with_capacity(16384);
+        let mut accumulated = Vec::with_capacity(32768);
+        let mut write_buf = Vec::with_capacity(65536);
 
         loop {
             // Read from io_uring stream into buffer
@@ -143,70 +153,114 @@ impl ShardWorker {
                 Err(_) => break,
             };
 
-            read_len += n;
-            let mut cursor = 0;
+            // Fast path: if accumulated buffer is empty, parse directly from read_buf
+            if accumulated.is_empty() {
+                let mut cursor = 0;
+                while cursor < n {
+                    match RespParser::parse(&read_buf[cursor..n]) {
+                        Ok(Some((cmd, consumed))) => {
+                            cursor += consumed;
 
-            // Pipeline loop: process all complete RESP commands in read buffer
-            while cursor < read_len {
-                match RespParser::parse(&read_buf[cursor..read_len]) {
-                    Ok(Some((cmd, consumed))) => {
-                        cursor += consumed;
+                            // Check cluster routing if router is enabled
+                            if let Some(ref r) = router {
+                                let key_to_check = match &cmd {
+                                    RespCommand::Get(k) | RespCommand::Set { key: k, .. } => Some(k.as_ref()),
+                                    RespCommand::Del(keys) => keys.first().map(|k| k.as_ref()),
+                                    RespCommand::Incr { key: k, .. } | RespCommand::Ttl(k) | RespCommand::Expire { key: k, .. } => {
+                                        Some(k.as_ref())
+                                    }
+                                    _ => None,
+                                };
 
-                        // Check cluster routing if router is enabled
-                        if let Some(ref r) = router {
-                            let key_to_check = match &cmd {
-                                RespCommand::Get(k) | RespCommand::Set { key: k, .. } => Some(k.as_ref()),
-                                RespCommand::Del(keys) => keys.first().map(|k| k.as_ref()),
-                                RespCommand::Incr { key: k, .. } | RespCommand::Ttl(k) | RespCommand::Expire { key: k, .. } => {
-                                    Some(k.as_ref())
-                                }
-                                _ => None,
-                            };
-
-                            if let Some(key) = key_to_check {
-                                if let RouteDecision::Moved { slot, target_addr, .. } = r.route_key(key) {
-                                    RespWriter::write_moved(&mut out_buf, slot, &target_addr);
-                                    continue;
+                                if let Some(key) = key_to_check {
+                                    if let RouteDecision::Moved { slot, target_addr, .. } = r.route_key(key) {
+                                        RespWriter::write_moved(&mut write_buf, slot, &target_addr);
+                                        continue;
+                                    }
                                 }
                             }
-                        }
 
-                        if let RespCommand::Quit = cmd {
-                            RespWriter::write_ok(&mut out_buf);
-                            let to_write = out_buf.split().freeze().to_vec();
-                            let _ = stream.write_all(to_write).await;
-                            return;
-                        }
+                            if let RespCommand::Quit = cmd {
+                                RespWriter::write_ok(&mut write_buf);
+                                let slice = std::mem::take(&mut write_buf);
+                                let _ = stream.write_all(slice).await;
+                                return;
+                            }
 
-                        handler.handle_command(cmd, &mut out_buf);
+                            handler.handle_command(cmd, &mut write_buf);
+                        }
+                        Ok(None) => {
+                            // Incomplete command, push remaining bytes to accumulated
+                            accumulated.extend_from_slice(&read_buf[cursor..n]);
+                            break;
+                        }
+                        Err(err) => {
+                            RespWriter::write_error(&mut write_buf, &err);
+                            break;
+                        }
                     }
-                    Ok(None) => {
-                        // Incomplete command, wait for more data
-                        break;
+                }
+            } else {
+                accumulated.extend_from_slice(&read_buf[..n]);
+                let mut cursor = 0;
+
+                while cursor < accumulated.len() {
+                    match RespParser::parse(&accumulated[cursor..]) {
+                        Ok(Some((cmd, consumed))) => {
+                            cursor += consumed;
+
+                            if let Some(ref r) = router {
+                                let key_to_check = match &cmd {
+                                    RespCommand::Get(k) | RespCommand::Set { key: k, .. } => Some(k.as_ref()),
+                                    RespCommand::Del(keys) => keys.first().map(|k| k.as_ref()),
+                                    RespCommand::Incr { key: k, .. } | RespCommand::Ttl(k) | RespCommand::Expire { key: k, .. } => {
+                                        Some(k.as_ref())
+                                    }
+                                    _ => None,
+                                };
+
+                                if let Some(key) = key_to_check {
+                                    if let RouteDecision::Moved { slot, target_addr, .. } = r.route_key(key) {
+                                        RespWriter::write_moved(&mut write_buf, slot, &target_addr);
+                                        continue;
+                                    }
+                                }
+                            }
+
+                            if let RespCommand::Quit = cmd {
+                                RespWriter::write_ok(&mut write_buf);
+                                let slice = std::mem::take(&mut write_buf);
+                                let _ = stream.write_all(slice).await;
+                                return;
+                            }
+
+                            handler.handle_command(cmd, &mut write_buf);
+                        }
+                        Ok(None) => break,
+                        Err(err) => {
+                            RespWriter::write_error(&mut write_buf, &err);
+                            cursor = accumulated.len();
+                            break;
+                        }
                     }
-                    Err(err) => {
-                        RespWriter::write_error(&mut out_buf, &err);
-                        cursor = read_len; // Reset
-                        break;
-                    }
+                }
+
+                if cursor == accumulated.len() {
+                    accumulated.clear();
+                } else if cursor > 0 {
+                    accumulated.drain(..cursor);
                 }
             }
 
-            // Flush response buffer via io_uring
-            if !out_buf.is_empty() {
-                let to_write = out_buf.split().freeze().to_vec();
-                let (w_res, _) = stream.write_all(to_write).await;
+            // Zero-allocation buffer reuse on write_all
+            if !write_buf.is_empty() {
+                let slice = std::mem::take(&mut write_buf);
+                let (w_res, mut returned_buf) = stream.write_all(slice).await;
                 if w_res.is_err() {
                     break;
                 }
-            }
-
-            // Shift unparsed bytes to front of buffer
-            if cursor < read_len {
-                read_buf.copy_within(cursor..read_len, 0);
-                read_len -= cursor;
-            } else {
-                read_len = 0;
+                returned_buf.clear();
+                write_buf = returned_buf;
             }
         }
     }
@@ -215,9 +269,10 @@ impl ShardWorker {
         mut stream: TcpStream,
         handler: Arc<BinaryHandler>,
     ) {
+        let _ = stream.set_nodelay(true);
         let mut read_buf = vec![0u8; 16384];
-        let mut read_len = 0;
-        let mut out_buf = BytesMut::with_capacity(16384);
+        let mut accumulated = Vec::with_capacity(32768);
+        let mut write_buf = Vec::with_capacity(65536);
 
         loop {
             let slice = std::mem::take(&mut read_buf);
@@ -230,37 +285,40 @@ impl ShardWorker {
                 Err(_) => break,
             };
 
-            read_len += n;
+            accumulated.extend_from_slice(&read_buf[..n]);
             let mut cursor = 0;
+            let mut out_buf = bytes::BytesMut::with_capacity(32768);
 
-            // Pipeline loop: process all binary frames
-            while cursor < read_len {
-                match BinaryRequest::parse(&read_buf[cursor..read_len]) {
+            while cursor < accumulated.len() {
+                match BinaryRequest::parse(&accumulated[cursor..]) {
                     Ok(Some((req, consumed))) => {
                         cursor += consumed;
                         handler.handle_request(req, &mut out_buf);
                     }
                     Ok(None) => break,
-                    Err(_) => {
-                        cursor = read_len;
-                        break;
-                    }
+                    Err(_) => break,
                 }
             }
 
             if !out_buf.is_empty() {
-                let to_write = out_buf.split().freeze().to_vec();
-                let (w_res, _) = stream.write_all(to_write).await;
+                write_buf.extend_from_slice(&out_buf);
+                out_buf.clear();
+            }
+
+            if !write_buf.is_empty() {
+                let slice = std::mem::take(&mut write_buf);
+                let (w_res, mut returned_buf) = stream.write_all(slice).await;
                 if w_res.is_err() {
                     break;
                 }
+                returned_buf.clear();
+                write_buf = returned_buf;
             }
 
-            if cursor < read_len {
-                read_buf.copy_within(cursor..read_len, 0);
-                read_len -= cursor;
-            } else {
-                read_len = 0;
+            if cursor == accumulated.len() {
+                accumulated.clear();
+            } else if cursor > 0 {
+                accumulated.drain(..cursor);
             }
         }
     }

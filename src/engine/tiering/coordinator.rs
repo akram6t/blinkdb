@@ -51,11 +51,9 @@ impl TieredStorageEngine {
 }
 
 impl StorageEngine for TieredStorageEngine {
+    #[inline(always)]
     fn get(&self, key: &[u8]) -> Option<Bytes> {
-        let now_ms = current_time_millis();
-        let now_secs = (now_ms / 1000) as u32;
-
-        // 1. Check in-memory Hot index
+        // 1. Check in-memory Hot index (hottest path)
         if let Some(entry) = self.hot_index.get(key) {
             match entry.location {
                 ValueLocation::Hot(val) => {
@@ -63,6 +61,8 @@ impl StorageEngine for TieredStorageEngine {
                     return Some(val);
                 }
                 ValueLocation::Cold(ptr) => {
+                    let now_ms = current_time_millis();
+                    let now_secs = (now_ms / 1000) as u32;
                     // Read from Cold layer via fast direct disk pointer
                     if let Ok(Some(val)) = self.cold_engine.read_pointer(ptr) {
                         self.hits.fetch_add(1, Ordering::Relaxed);
@@ -86,6 +86,8 @@ impl StorageEngine for TieredStorageEngine {
         }
 
         // 2. Check Cold LSM engine fallback
+        let now_ms = current_time_millis();
+        let now_secs = (now_ms / 1000) as u32;
         if let Ok(Some((val_opt, exp, _ptr_opt))) = self.cold_engine.get(key) {
             if let Some(val) = val_opt {
                 self.hits.fetch_add(1, Ordering::Relaxed);

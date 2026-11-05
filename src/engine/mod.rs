@@ -3,7 +3,31 @@ pub mod hot;
 pub mod tiering;
 
 use bytes::Bytes;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+static CACHED_TIME_MS: AtomicU64 = AtomicU64::new(0);
+
+pub fn update_cached_time() {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    CACHED_TIME_MS.store(now, Ordering::Relaxed);
+}
+
+#[inline(always)]
+pub fn current_time_millis() -> u64 {
+    let cached = CACHED_TIME_MS.load(Ordering::Relaxed);
+    if cached != 0 {
+        cached
+    } else {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DiskPointer {
@@ -27,10 +51,15 @@ pub struct ValueEntry {
 }
 
 impl ValueEntry {
+    #[inline(always)]
     pub fn new_hot(value: Bytes, ttl_ms: Option<u64>) -> Self {
-        let now_ms = current_time_millis();
-        let expire_at_ms = ttl_ms.map(|ttl| now_ms + ttl);
-        let now_secs = (now_ms / 1000) as u32;
+        let (expire_at_ms, now_secs) = match ttl_ms {
+            Some(ttl) => {
+                let now_ms = current_time_millis();
+                (Some(now_ms + ttl), (now_ms / 1000) as u32)
+            }
+            None => (None, 0),
+        };
 
         Self {
             location: ValueLocation::Hot(value),
@@ -41,9 +70,13 @@ impl ValueEntry {
     }
 
     pub fn new_cold(ptr: DiskPointer, ttl_ms: Option<u64>) -> Self {
-        let now_ms = current_time_millis();
-        let expire_at_ms = ttl_ms.map(|ttl| now_ms + ttl);
-        let now_secs = (now_ms / 1000) as u32;
+        let (expire_at_ms, now_secs) = match ttl_ms {
+            Some(ttl) => {
+                let now_ms = current_time_millis();
+                (Some(now_ms + ttl), (now_ms / 1000) as u32)
+            }
+            None => (None, 0),
+        };
 
         Self {
             location: ValueLocation::Cold(ptr),
@@ -53,7 +86,7 @@ impl ValueEntry {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn is_expired(&self, now_ms: u64) -> bool {
         match self.expire_at_ms {
             Some(exp) => now_ms >= exp,
@@ -61,18 +94,11 @@ impl ValueEntry {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn touch(&mut self, now_secs: u32) {
         self.last_accessed_secs = now_secs;
         self.access_count = self.access_count.saturating_add(1);
     }
-}
-
-pub fn current_time_millis() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
 }
 
 #[derive(Default, Debug, Clone)]

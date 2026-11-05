@@ -64,7 +64,7 @@ fn test_integration_dual_protocol_interaction() {
     let bin_handler = BinaryHandler::new(engine.clone());
 
     // Write via RESP3
-    let mut resp_out = bytes::BytesMut::new();
+    let mut resp_out = Vec::new();
     let set_cmd = RespCommand::Set {
         key: Bytes::from("shared_key"),
         value: Bytes::from("shared_val_123"),

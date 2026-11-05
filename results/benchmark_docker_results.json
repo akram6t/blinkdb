@@ -1,0 +1,350 @@
+{
+  "RustForge": {
+    "name": "RustForge",
+    "arch": "io_uring / Thread-Per-Core (Rust)",
+    "threads": 2,
+    "initial_stats": "8.84MiB / 4GiB | 0.47%",
+    "suites": {
+      "suite1_standard_c50": {
+        "PING_INLINE": {
+          "rps": 185185.17,
+          "avg_ms": 0.14,
+          "min_ms": 0.048,
+          "p50_ms": 0.143,
+          "p95_ms": 0.151,
+          "p99_ms": 0.167,
+          "max_ms": 2.311
+        },
+        "PING_MBULK": {
+          "rps": 186046.5,
+          "avg_ms": 0.138,
+          "min_ms": 0.04,
+          "p50_ms": 0.143,
+          "p95_ms": 0.151,
+          "p99_ms": 0.159,
+          "max_ms": 0.295
+        },
+        "SET": {
+          "rps": 183654.73,
+          "avg_ms": 0.14,
+          "min_ms": 0.048,
+          "p50_ms": 0.143,
+          "p95_ms": 0.151,
+          "p99_ms": 0.167,
+          "max_ms": 0.527
+        },
+        "GET": {
+          "rps": 183486.23,
+          "avg_ms": 0.141,
+          "min_ms": 0.048,
+          "p50_ms": 0.143,
+          "p95_ms": 0.151,
+          "p99_ms": 0.159,
+          "max_ms": 7.935
+        },
+        "INCR": {
+          "rps": 186741.36,
+          "avg_ms": 0.14,
+          "min_ms": 0.048,
+          "p50_ms": 0.143,
+          "p95_ms": 0.151,
+          "p99_ms": 0.159,
+          "max_ms": 2.999
+        }
+      },
+      "suite2_high_concurrency_c100": {
+        "SET": {
+          "rps": 177462.3,
+          "avg_ms": 0.291,
+          "min_ms": 0.088,
+          "p50_ms": 0.279,
+          "p95_ms": 0.319,
+          "p99_ms": 0.559,
+          "max_ms": 12.719
+        },
+        "GET": {
+          "rps": 180995.47,
+          "avg_ms": 0.28,
+          "min_ms": 0.104,
+          "p50_ms": 0.279,
+          "p95_ms": 0.319,
+          "p99_ms": 0.343,
+          "max_ms": 1.471
+        }
+      },
+      "suite3_pipelined_p16": {
+        "SET": {
+          "rps": 2016129.12,
+          "avg_ms": 0.21,
+          "min_ms": 0.088,
+          "p50_ms": 0.207,
+          "p95_ms": 0.215,
+          "p99_ms": 0.575,
+          "max_ms": 2.167
+        },
+        "GET": {
+          "rps": 2032520.25,
+          "avg_ms": 0.201,
+          "min_ms": 0.104,
+          "p50_ms": 0.199,
+          "p95_ms": 0.207,
+          "p99_ms": 0.223,
+          "max_ms": 0.967
+        }
+      },
+      "suite4_payload_256b": {
+        "SET": {
+          "rps": 174672.48,
+          "avg_ms": 0.149,
+          "min_ms": 0.04,
+          "p50_ms": 0.143,
+          "p95_ms": 0.159,
+          "p99_ms": 0.351,
+          "max_ms": 3.959
+        },
+        "GET": {
+          "rps": 182481.77,
+          "avg_ms": 0.142,
+          "min_ms": 0.056,
+          "p50_ms": 0.143,
+          "p95_ms": 0.159,
+          "p99_ms": 0.207,
+          "max_ms": 2.167
+        }
+      }
+    },
+    "post_stats": "13.84MiB / 4GiB | 0.35%"
+  },
+  "DragonflyDB": {
+    "name": "DragonflyDB",
+    "arch": "io_uring Proactor / Fibers (C++)",
+    "threads": 2,
+    "initial_stats": "16.34MiB / 4GiB | 1.01%",
+    "suites": {
+      "suite1_standard_c50": {
+        "PING_INLINE": {
+          "rps": 173160.17,
+          "avg_ms": 0.151,
+          "min_ms": 0.048,
+          "p50_ms": 0.143,
+          "p95_ms": 0.183,
+          "p99_ms": 0.351,
+          "max_ms": 6.927
+        },
+        "PING_MBULK": {
+          "rps": 191204.59,
+          "avg_ms": 0.135,
+          "min_ms": 0.04,
+          "p50_ms": 0.135,
+          "p95_ms": 0.151,
+          "p99_ms": 0.159,
+          "max_ms": 4.303
+        },
+        "SET": {
+          "rps": 192122.95,
+          "avg_ms": 0.138,
+          "min_ms": 0.048,
+          "p50_ms": 0.143,
+          "p95_ms": 0.151,
+          "p99_ms": 0.159,
+          "max_ms": 1.031
+        },
+        "GET": {
+          "rps": 195121.95,
+          "avg_ms": 0.136,
+          "min_ms": 0.048,
+          "p50_ms": 0.135,
+          "p95_ms": 0.151,
+          "p99_ms": 0.159,
+          "max_ms": 0.959
+        },
+        "INCR": {
+          "rps": 196270.84,
+          "avg_ms": 0.136,
+          "min_ms": 0.048,
+          "p50_ms": 0.135,
+          "p95_ms": 0.151,
+          "p99_ms": 0.159,
+          "max_ms": 1.151
+        }
+      },
+      "suite2_high_concurrency_c100": {
+        "SET": {
+          "rps": 186567.16,
+          "avg_ms": 0.283,
+          "min_ms": 0.048,
+          "p50_ms": 0.271,
+          "p95_ms": 0.295,
+          "p99_ms": 0.343,
+          "max_ms": 27.919
+        },
+        "GET": {
+          "rps": 189753.31,
+          "avg_ms": 0.273,
+          "min_ms": 0.096,
+          "p50_ms": 0.271,
+          "p95_ms": 0.295,
+          "p99_ms": 0.351,
+          "max_ms": 4.311
+        }
+      },
+      "suite3_pipelined_p16": {
+        "SET": {
+          "rps": 1086956.5,
+          "avg_ms": 0.706,
+          "min_ms": 0.096,
+          "p50_ms": 0.367,
+          "p95_ms": 3.039,
+          "p99_ms": 8.343,
+          "max_ms": 33.823
+        },
+        "GET": {
+          "rps": 1329787.25,
+          "avg_ms": 0.565,
+          "min_ms": 0.096,
+          "p50_ms": 0.343,
+          "p95_ms": 2.111,
+          "p99_ms": 2.743,
+          "max_ms": 3.439
+        }
+      },
+      "suite4_payload_256b": {
+        "SET": {
+          "rps": 173611.12,
+          "avg_ms": 0.151,
+          "min_ms": 0.048,
+          "p50_ms": 0.151,
+          "p95_ms": 0.167,
+          "p99_ms": 0.175,
+          "max_ms": 1.679
+        },
+        "GET": {
+          "rps": 186219.73,
+          "avg_ms": 0.142,
+          "min_ms": 0.048,
+          "p50_ms": 0.143,
+          "p95_ms": 0.159,
+          "p99_ms": 0.167,
+          "max_ms": 0.639
+        }
+      }
+    },
+    "post_stats": "20.51MiB / 4GiB | 0.84%"
+  },
+  "Redis 7": {
+    "name": "Redis 7",
+    "arch": "epoll Single-Threaded Event Loop (C)",
+    "threads": 1,
+    "initial_stats": "4.824MiB / 4GiB | 1.06%",
+    "suites": {
+      "suite1_standard_c50": {
+        "PING_INLINE": {
+          "rps": 173010.38,
+          "avg_ms": 0.152,
+          "min_ms": 0.048,
+          "p50_ms": 0.135,
+          "p95_ms": 0.295,
+          "p99_ms": 0.407,
+          "max_ms": 1.743
+        },
+        "PING_MBULK": {
+          "rps": 179694.52,
+          "avg_ms": 0.146,
+          "min_ms": 0.048,
+          "p50_ms": 0.135,
+          "p95_ms": 0.183,
+          "p99_ms": 0.335,
+          "max_ms": 1.031
+        },
+        "SET": {
+          "rps": 192307.7,
+          "avg_ms": 0.138,
+          "min_ms": 0.04,
+          "p50_ms": 0.135,
+          "p95_ms": 0.151,
+          "p99_ms": 0.247,
+          "max_ms": 0.919
+        },
+        "GET": {
+          "rps": 191570.88,
+          "avg_ms": 0.139,
+          "min_ms": 0.048,
+          "p50_ms": 0.135,
+          "p95_ms": 0.151,
+          "p99_ms": 0.239,
+          "max_ms": 1.239
+        },
+        "INCR": {
+          "rps": 193610.84,
+          "avg_ms": 0.135,
+          "min_ms": 0.048,
+          "p50_ms": 0.135,
+          "p95_ms": 0.151,
+          "p99_ms": 0.175,
+          "max_ms": 0.639
+        }
+      },
+      "suite2_high_concurrency_c100": {
+        "SET": {
+          "rps": 176366.86,
+          "avg_ms": 0.294,
+          "min_ms": 0.096,
+          "p50_ms": 0.287,
+          "p95_ms": 0.319,
+          "p99_ms": 0.519,
+          "max_ms": 3.015
+        },
+        "GET": {
+          "rps": 187441.42,
+          "avg_ms": 0.28,
+          "min_ms": 0.088,
+          "p50_ms": 0.271,
+          "p95_ms": 0.335,
+          "p99_ms": 0.631,
+          "max_ms": 1.975
+        }
+      },
+      "suite3_pipelined_p16": {
+        "SET": {
+          "rps": 1240694.75,
+          "avg_ms": 0.584,
+          "min_ms": 0.152,
+          "p50_ms": 0.575,
+          "p95_ms": 0.751,
+          "p99_ms": 1.079,
+          "max_ms": 2.311
+        },
+        "GET": {
+          "rps": 1436781.62,
+          "avg_ms": 0.497,
+          "min_ms": 0.176,
+          "p50_ms": 0.487,
+          "p95_ms": 0.647,
+          "p99_ms": 0.679,
+          "max_ms": 1.087
+        }
+      },
+      "suite4_payload_256b": {
+        "SET": {
+          "rps": 186567.16,
+          "avg_ms": 0.141,
+          "min_ms": 0.048,
+          "p50_ms": 0.135,
+          "p95_ms": 0.151,
+          "p99_ms": 0.263,
+          "max_ms": 1.559
+        },
+        "GET": {
+          "rps": 192307.7,
+          "avg_ms": 0.137,
+          "min_ms": 0.04,
+          "p50_ms": 0.135,
+          "p95_ms": 0.151,
+          "p99_ms": 0.183,
+          "max_ms": 1.743
+        }
+      }
+    },
+    "post_stats": "5.934MiB / 4GiB | 1.04%"
+  }
+}
