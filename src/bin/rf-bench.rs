@@ -7,13 +7,13 @@ use clap::Parser;
 use hdrhistogram::Histogram;
 use parking_lot::Mutex;
 
-use rustforge::protocol::binary::frame::{
+use blinkdb::protocol::binary::frame::{
     BinaryRequest, OP_GET, OP_SET, RESP_HEADER_SIZE, RF_MAGIC,
 };
 
 #[derive(Parser, Debug)]
-#[command(name = "rf-bench")]
-#[command(about = "RustForge High-Performance Benchmarking Tool (RESP3 & Native Binary)")]
+#[command(name = "blink-bench")]
+#[command(about = "BlinkDB High-Performance Benchmarking Tool (RESP3 & Native Binary)")]
 struct BenchArgs {
     #[arg(short = 'H', long, default_value = "127.0.0.1")]
     host: String,
@@ -78,7 +78,7 @@ fn main() {
     };
 
     println!("============================================================");
-    println!(" RustForge Benchmark Client ");
+    println!("  BlinkDB Benchmark Client ");
     println!("============================================================");
     println!("Target:             {}:{}", args.host, port);
     println!("Protocol:           {}", args.protocol.to_uppercase());

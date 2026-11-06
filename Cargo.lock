@@ -125,6 +125,40 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ded4057c258ba199e2d26386d3af3780957ecaee6c4ef4041c6b4b8b97c0b06"
 
 [[package]]
+name = "blinkdb"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "bincode",
+ "bitflags 2.13.2",
+ "bytes",
+ "clap",
+ "core_affinity",
+ "crc32fast",
+ "crossbeam",
+ "crossbeam-channel",
+ "dashmap",
+ "env_logger",
+ "hdrhistogram",
+ "itoa",
+ "libc",
+ "log",
+ "memchr",
+ "mimalloc",
+ "monoio",
+ "nix 0.29.0",
+ "parking_lot",
+ "rand",
+ "scc",
+ "serde",
+ "serde_json",
+ "smallvec",
+ "socket2",
+ "tempfile",
+ "zerocopy",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -932,40 +966,6 @@ name = "regex-syntax"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
-
-[[package]]
-name = "rustforge"
-version = "0.1.0"
-dependencies = [
- "ahash",
- "bincode",
- "bitflags 2.13.2",
- "bytes",
- "clap",
- "core_affinity",
- "crc32fast",
- "crossbeam",
- "crossbeam-channel",
- "dashmap",
- "env_logger",
- "hdrhistogram",
- "itoa",
- "libc",
- "log",
- "memchr",
- "mimalloc",
- "monoio",
- "nix 0.29.0",
- "parking_lot",
- "rand",
- "scc",
- "serde",
- "serde_json",
- "smallvec",
- "socket2",
- "tempfile",
- "zerocopy",
-]
 
 [[package]]
 name = "rustix"

@@ -117,7 +117,7 @@ impl RespHandler {
                     out.extend_from_slice(b"*14\r\n");
                 }
                 RespWriter::write_bulk_string(out, b"server");
-                RespWriter::write_bulk_string(out, b"rustforge");
+                RespWriter::write_bulk_string(out, b"blinkdb");
                 RespWriter::write_bulk_string(out, b"version");
                 RespWriter::write_bulk_string(out, b"0.1.0");
                 RespWriter::write_bulk_string(out, b"proto");
@@ -135,6 +135,7 @@ impl RespHandler {
                 let stats = self.engine.stats();
                 let info = format!(
                     "# Server\r\n\
+                    blinkdb_version:0.1.0\r\n\
                     rustforge_version:0.1.0\r\n\
                     arch_bits:64\r\n\
                     os:Linux\r\n\

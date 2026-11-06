@@ -15,13 +15,13 @@ def main():
     print("[PASS] PING ->", res.strip())
 
     # 2. SET
-    res = send_cmd(s, "*3\r\n$3\r\nSET\r\n$4\r\nname\r\n$9\r\nRustForge\r\n")
+    res = send_cmd(s, "*3\r\n$3\r\nSET\r\n$4\r\nname\r\n$7\r\nBlinkDB\r\n")
     assert "+OK" in res, f"Expected +OK, got {res}"
-    print("[PASS] SET name RustForge ->", res.strip())
+    print("[PASS] SET name BlinkDB ->", res.strip())
 
     # 3. GET
     res = send_cmd(s, "*2\r\n$3\r\nGET\r\n$4\r\nname\r\n")
-    assert "RustForge" in res, f"Expected RustForge, got {res}"
+    assert "BlinkDB" in res, f"Expected BlinkDB, got {res}"
     print("[PASS] GET name ->", res.strip())
 
     # 4. INCR

@@ -1,6 +1,7 @@
 FROM ubuntu:24.04
 WORKDIR /app
-COPY bin/rustforge-server /app/rustforge-server
+COPY bin/blinkdb-server /app/blinkdb-server
+RUN ln -s /app/blinkdb-server /app/rustforge-server
 EXPOSE 6379 7379
-ENTRYPOINT ["/app/rustforge-server"]
-CMD ["--resp-port", "6379", "--binary-port", "7379", "--threads", "2", "--data-dir", "/tmp/rustforge_data"]
+ENTRYPOINT ["/app/blinkdb-server"]
+CMD ["--resp-port", "6379", "--binary-port", "7379", "--threads", "2", "--data-dir", "/tmp/blinkdb_data"]

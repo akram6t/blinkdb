@@ -13,12 +13,12 @@ def send_cmd(port, cmd):
     return data
 
 def main():
-    print("[+] Starting 2-node RustForge cluster test...")
+    print("[+] Starting 2-node BlinkDB cluster test...")
     shutil.rmtree("/tmp/rf_cluster_1", ignore_errors=True)
     shutil.rmtree("/tmp/rf_cluster_2", ignore_errors=True)
 
     p1 = subprocess.Popen([
-        "bin/rustforge-server",
+        "bin/blinkdb-server",
         "--resp-port", "6381",
         "--binary-port", "7381",
         "--threads", "2",
@@ -28,7 +28,7 @@ def main():
     ])
 
     p2 = subprocess.Popen([
-        "bin/rustforge-server",
+        "bin/blinkdb-server",
         "--resp-port", "6382",
         "--binary-port", "7382",
         "--threads", "2",

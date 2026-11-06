@@ -1,18 +1,18 @@
 [package]
-name = "rustforge"
+name = "blinkdb"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "rustforge"
+name = "blinkdb"
 path = "src/lib.rs"
 
 [[bin]]
-name = "rustforge-server"
+name = "blinkdb-server"
 path = "src/main.rs"
 
 [[bin]]
-name = "rf-bench"
+name = "blink-bench"
 path = "src/bin/rf-bench.rs"
 
 [[bin]]

@@ -3,15 +3,15 @@ use std::sync::Arc;
 use clap::Parser;
 use log::info;
 
-use rustforge::cluster::raft::state_machine::RaftEngine;
-use rustforge::cluster::router::ClusterRouter;
-use rustforge::core::affinity::available_cores;
-use rustforge::core::shard::ShardWorker;
-use rustforge::engine::tiering::coordinator::TieredStorageEngine;
+use blinkdb::cluster::raft::state_machine::RaftEngine;
+use blinkdb::cluster::router::ClusterRouter;
+use blinkdb::core::affinity::available_cores;
+use blinkdb::core::shard::ShardWorker;
+use blinkdb::engine::tiering::coordinator::TieredStorageEngine;
 
 #[derive(Parser, Debug)]
-#[command(name = "rustforge-server")]
-#[command(about = "RustForge: A Linux-Native, Thread-Per-Core, Tiered In-Memory Database")]
+#[command(name = "blinkdb-server")]
+#[command(about = "BlinkDB: A Linux-Native, Thread-Per-Core, Tiered In-Memory Database")]
 struct Args {
     #[arg(short = 'p', long, default_value_t = 6379)]
     resp_port: u16,
@@ -43,7 +43,7 @@ fn main() {
     let worker_count = if args.threads == 0 { num_cores } else { args.threads };
 
     info!("============================================================");
-    info!(" RustForge Server - Linux io_uring Thread-Per-Core Database ");
+    info!("  BlinkDB Server - Linux io_uring Thread-Per-Core Database  ");
     info!("============================================================");
     info!("RESP3 Compatibility Port: {}", args.resp_port);
     info!("Native Binary Port:       {}", args.binary_port);
@@ -83,7 +83,7 @@ fn main() {
         let r = router.clone();
 
         let handle = std::thread::Builder::new()
-            .name(format!("rustforge-worker-{}", shard_id))
+            .name(format!("blinkdb-worker-{}", shard_id))
             .spawn(move || {
                 let worker = ShardWorker {
                     shard_id,

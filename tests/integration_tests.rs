@@ -2,17 +2,17 @@ use bytes::Bytes;
 use tempfile::tempdir;
 use std::sync::Arc;
 
-use rustforge::cluster::pd::driver::{HeartbeatReport, PlacementDriver, RegionReport};
-use rustforge::cluster::raft::state_machine::RaftEngine;
-use rustforge::cluster::router::{ClusterRouter, RouteDecision};
-use rustforge::engine::tiering::coordinator::TieredStorageEngine;
-use rustforge::engine::StorageEngine;
-use rustforge::protocol::binary::frame::{
+use blinkdb::cluster::pd::driver::{HeartbeatReport, PlacementDriver, RegionReport};
+use blinkdb::cluster::raft::state_machine::RaftEngine;
+use blinkdb::cluster::router::{ClusterRouter, RouteDecision};
+use blinkdb::engine::tiering::coordinator::TieredStorageEngine;
+use blinkdb::engine::StorageEngine;
+use blinkdb::protocol::binary::frame::{
     BinaryRequest, OP_GET, OP_DEL, STATUS_OK,
 };
-use rustforge::protocol::binary::handler::BinaryHandler;
-use rustforge::protocol::resp::handler::RespHandler;
-use rustforge::protocol::resp::parser::RespCommand;
+use blinkdb::protocol::binary::handler::BinaryHandler;
+use blinkdb::protocol::resp::handler::RespHandler;
+use blinkdb::protocol::resp::parser::RespCommand;
 
 #[test]
 fn test_integration_full_tiered_lifecycle() {
