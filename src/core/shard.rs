@@ -27,6 +27,7 @@ impl ShardWorker {
     pub fn run(self) {
         // Pin worker thread to target CPU core
         pin_to_core(self.core_id);
+        crate::engine::tiering::coordinator::set_local_shard_id(self.shard_id);
 
         let mut rt = monoio::RuntimeBuilder::<monoio::FusionDriver>::new()
             .enable_all()

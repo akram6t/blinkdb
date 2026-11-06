@@ -9,16 +9,41 @@ use crate::engine::{
     current_time_millis, EngineStats, StorageEngine, ValueEntry, ValueLocation,
 };
 
+pub const NUM_COUNTERS: usize = 64;
+
+#[repr(align(64))]
+pub struct CacheAligned<T>(pub T);
+
+impl<T> CacheAligned<T> {
+    pub const fn new(val: T) -> Self {
+        Self(val)
+    }
+}
+
+thread_local! {
+    static LOCAL_SHARD_ID: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[inline(always)]
+pub fn set_local_shard_id(id: usize) {
+    LOCAL_SHARD_ID.with(|cell| cell.set(id));
+}
+
+#[inline(always)]
+pub fn get_local_shard_id() -> usize {
+    LOCAL_SHARD_ID.with(|cell| cell.get())
+}
+
 pub struct TieredStorageEngine {
     hot_index: Arc<SccIndex>,
     cold_engine: Arc<LsmEngine>,
     max_hot_bytes: usize,
-    hot_bytes_approx: AtomicUsize,
-    is_evicting: AtomicBool,
-    hits: AtomicU64,
-    misses: AtomicU64,
-    evictions: AtomicU64,
-    promotions: AtomicU64,
+    hot_bytes_approx: [CacheAligned<AtomicUsize>; NUM_COUNTERS],
+    is_evicting: CacheAligned<AtomicBool>,
+    hits: [CacheAligned<AtomicU64>; NUM_COUNTERS],
+    misses: [CacheAligned<AtomicU64>; NUM_COUNTERS],
+    evictions: CacheAligned<AtomicU64>,
+    promotions: CacheAligned<AtomicU64>,
 }
 
 impl TieredStorageEngine {
@@ -30,22 +55,22 @@ impl TieredStorageEngine {
             hot_index: hot,
             cold_engine: cold,
             max_hot_bytes,
-            hot_bytes_approx: AtomicUsize::new(0),
-            is_evicting: AtomicBool::new(false),
-            hits: AtomicU64::new(0),
-            misses: AtomicU64::new(0),
-            evictions: AtomicU64::new(0),
-            promotions: AtomicU64::new(0),
+            hot_bytes_approx: [const { CacheAligned::new(AtomicUsize::new(0)) }; NUM_COUNTERS],
+            is_evicting: CacheAligned::new(AtomicBool::new(false)),
+            hits: [const { CacheAligned::new(AtomicU64::new(0)) }; NUM_COUNTERS],
+            misses: [const { CacheAligned::new(AtomicU64::new(0)) }; NUM_COUNTERS],
+            evictions: CacheAligned::new(AtomicU64::new(0)),
+            promotions: CacheAligned::new(AtomicU64::new(0)),
         })
     }
 
     #[inline]
     fn check_eviction_threshold(&self) {
-        if self.is_evicting.compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed).is_ok() {
+        if self.is_evicting.0.compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed).is_ok() {
             // Evict a bounded batch of keys (max 256) so worker latency never spikes
             let target = (self.hot_index.len() / 100).clamp(16, 256);
             self.evict_cold(target);
-            self.is_evicting.store(false, Ordering::Release);
+            self.is_evicting.0.store(false, Ordering::Release);
         }
     }
 }
@@ -53,31 +78,33 @@ impl TieredStorageEngine {
 impl StorageEngine for TieredStorageEngine {
     #[inline(always)]
     fn get(&self, key: &[u8]) -> Option<Bytes> {
-        // 1. Check in-memory Hot index (hottest path)
-        if let Some(entry) = self.hot_index.get(key) {
-            match entry.location {
-                ValueLocation::Hot(val) => {
-                    self.hits.fetch_add(1, Ordering::Relaxed);
+        let shard = get_local_shard_id() & (NUM_COUNTERS - 1);
+
+        // 1. Fast hot index lookup (zero struct-clone fast-path)
+        if let Some(res) = self.hot_index.get_value_fast(key) {
+            match res {
+                Ok(val) => {
+                    self.hits[shard].0.fetch_add(1, Ordering::Relaxed);
                     return Some(val);
                 }
-                ValueLocation::Cold(ptr) => {
+                Err(ptr) => {
                     let now_ms = current_time_millis();
                     let now_secs = (now_ms / 1000) as u32;
                     // Read from Cold layer via fast direct disk pointer
                     if let Ok(Some(val)) = self.cold_engine.read_pointer(ptr) {
-                        self.hits.fetch_add(1, Ordering::Relaxed);
-                        self.promotions.fetch_add(1, Ordering::Relaxed);
+                        self.hits[shard].0.fetch_add(1, Ordering::Relaxed);
+                        self.promotions.0.fetch_add(1, Ordering::Relaxed);
 
                         // Promote back to Hot memory
                         let key_bytes = Bytes::copy_from_slice(key);
                         let val_size = val.len();
                         self.hot_index.insert(key_bytes, ValueEntry {
                             location: ValueLocation::Hot(val.clone()),
-                            expire_at_ms: entry.expire_at_ms,
+                            expire_at_ms: None,
                             last_accessed_secs: now_secs,
-                            access_count: entry.access_count.saturating_add(1),
+                            access_count: 2,
                         });
-                        self.hot_bytes_approx.fetch_add(val_size, Ordering::Relaxed);
+                        self.hot_bytes_approx[shard].0.fetch_add(val_size, Ordering::Relaxed);
 
                         return Some(val);
                     }
@@ -90,8 +117,8 @@ impl StorageEngine for TieredStorageEngine {
         let now_secs = (now_ms / 1000) as u32;
         if let Ok(Some((val_opt, exp, _ptr_opt))) = self.cold_engine.get(key) {
             if let Some(val) = val_opt {
-                self.hits.fetch_add(1, Ordering::Relaxed);
-                self.promotions.fetch_add(1, Ordering::Relaxed);
+                self.hits[shard].0.fetch_add(1, Ordering::Relaxed);
+                self.promotions.0.fetch_add(1, Ordering::Relaxed);
 
                 let key_bytes = Bytes::copy_from_slice(key);
                 let val_size = val.len();
@@ -101,13 +128,13 @@ impl StorageEngine for TieredStorageEngine {
                     last_accessed_secs: now_secs,
                     access_count: 1,
                 });
-                self.hot_bytes_approx.fetch_add(val_size, Ordering::Relaxed);
+                self.hot_bytes_approx[shard].0.fetch_add(val_size, Ordering::Relaxed);
 
                 return Some(val);
             }
         }
 
-        self.misses.fetch_add(1, Ordering::Relaxed);
+        self.misses[shard].0.fetch_add(1, Ordering::Relaxed);
         None
     }
 
@@ -119,10 +146,18 @@ impl StorageEngine for TieredStorageEngine {
         let entry = ValueEntry::new_hot(value, ttl_ms);
         self.hot_index.insert(key, entry);
 
-        let delta = key_len + val_len + 32;
-        let prev = self.hot_bytes_approx.fetch_add(delta, Ordering::Relaxed);
-        if self.max_hot_bytes > 0 && (prev + delta) > self.max_hot_bytes {
-            self.check_eviction_threshold();
+        if self.max_hot_bytes > 0 {
+            let shard = get_local_shard_id() & (NUM_COUNTERS - 1);
+            let delta = key_len + val_len + 32;
+            let prev = self.hot_bytes_approx[shard].0.fetch_add(delta, Ordering::Relaxed);
+
+            // Check eviction threshold only once every 64KB allocated per shard to eliminate bus locks
+            if (prev / 65536) != ((prev + delta) / 65536) {
+                let total_hot: usize = self.hot_bytes_approx.iter().map(|c| c.0.load(Ordering::Relaxed)).sum();
+                if total_hot > self.max_hot_bytes {
+                    self.check_eviction_threshold();
+                }
+            }
         }
     }
 
@@ -157,7 +192,9 @@ impl StorageEngine for TieredStorageEngine {
             None => delta,
         };
 
-        let new_bytes = Bytes::from(new_num.to_string());
+        let mut itoa_buf = itoa::Buffer::new();
+        let formatted = itoa_buf.format(new_num);
+        let new_bytes = Bytes::copy_from_slice(formatted.as_bytes());
         self.set(Bytes::copy_from_slice(key), new_bytes, None);
         Ok(new_num)
     }
@@ -168,7 +205,9 @@ impl StorageEngine for TieredStorageEngine {
 
     fn flushdb(&self) {
         self.hot_index.clear();
-        self.hot_bytes_approx.store(0, Ordering::Relaxed);
+        for b in &self.hot_bytes_approx {
+            b.0.store(0, Ordering::Relaxed);
+        }
     }
 
     fn stats(&self) -> EngineStats {
@@ -192,16 +231,19 @@ impl StorageEngine for TieredStorageEngine {
 
         let est_hot = (total_keys as f64 * hot_ratio) as usize;
         let est_cold = total_keys.saturating_sub(est_hot);
+        let total_memory_bytes: usize = self.hot_bytes_approx.iter().map(|b| b.0.load(Ordering::Relaxed)).sum();
+        let total_hits: u64 = self.hits.iter().map(|h| h.0.load(Ordering::Relaxed)).sum();
+        let total_misses: u64 = self.misses.iter().map(|m| m.0.load(Ordering::Relaxed)).sum();
 
         EngineStats {
             hot_keys: est_hot,
             cold_keys: est_cold,
-            memory_bytes: self.hot_bytes_approx.load(Ordering::Relaxed),
+            memory_bytes: total_memory_bytes,
             disk_bytes: (self.cold_engine.sstable_count() * 4096) as u64,
-            hits: self.hits.load(Ordering::Relaxed),
-            misses: self.misses.load(Ordering::Relaxed),
-            evictions: self.evictions.load(Ordering::Relaxed),
-            promotions: self.promotions.load(Ordering::Relaxed),
+            hits: total_hits,
+            misses: total_misses,
+            evictions: self.evictions.0.load(Ordering::Relaxed),
+            promotions: self.promotions.0.load(Ordering::Relaxed),
         }
     }
 
@@ -254,8 +296,10 @@ impl StorageEngine for TieredStorageEngine {
                         });
                     }
                 }
-                self.hot_bytes_approx.fetch_sub(freed_bytes.min(self.hot_bytes_approx.load(Ordering::Relaxed)), Ordering::Relaxed);
-                self.evictions.fetch_add(count as u64, Ordering::Relaxed);
+                let shard = get_local_shard_id() & (NUM_COUNTERS - 1);
+                let current_approx = self.hot_bytes_approx[shard].0.load(Ordering::Relaxed);
+                self.hot_bytes_approx[shard].0.fetch_sub(freed_bytes.min(current_approx), Ordering::Relaxed);
+                self.evictions.0.fetch_add(count as u64, Ordering::Relaxed);
                 count
             }
             Err(e) => {

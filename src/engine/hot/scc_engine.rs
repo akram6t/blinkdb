@@ -53,6 +53,31 @@ impl SccIndex {
     }
 
     #[inline(always)]
+    pub fn get_value_fast(&self, key: &[u8]) -> Option<Result<Bytes, crate::engine::DiskPointer>> {
+        let mut expired = false;
+        let now_ms = current_time_millis();
+        let result = self.map.read_sync(key, |_k, entry| {
+            if let Some(exp) = entry.expire_at_ms {
+                if now_ms >= exp {
+                    expired = true;
+                    return None;
+                }
+            }
+            match &entry.location {
+                crate::engine::ValueLocation::Hot(val) => Some(Ok(val.clone())),
+                crate::engine::ValueLocation::Cold(ptr) => Some(Err(*ptr)),
+            }
+        }).flatten();
+
+        if expired {
+            let _ = self.remove(key);
+            None
+        } else {
+            result
+        }
+    }
+
+    #[inline(always)]
     pub fn insert(&self, key: Bytes, entry: ValueEntry) {
         let _ = self.map.upsert_sync(key, entry);
     }

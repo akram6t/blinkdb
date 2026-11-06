@@ -174,7 +174,7 @@ def run_memtier(args, json_name="memtier_run.json", timeout=60):
             return None
     return None
 
-def get_targets(cores, mem_gb):
+def get_targets(cores, mem_gb, cpuset):
     mem_str = f"{mem_gb}g"
     db_mem_mb = int((mem_gb - 0.5) * 1024)
 
@@ -188,7 +188,7 @@ def get_targets(cores, mem_gb):
                 "--name", "rustforge_bench",
                 "--security-opt", "seccomp=unconfined",
                 "--network", "host",
-                "--cpus", str(cores),
+                "--cpuset-cpus", cpuset,
                 "--memory", mem_str,
                 "rustforge:latest",
                 "--threads", str(cores),
@@ -207,7 +207,7 @@ def get_targets(cores, mem_gb):
                 "--name", "dragonfly_bench",
                 "--security-opt", "seccomp=unconfined",
                 "--network", "host",
-                "--cpus", str(cores),
+                "--cpuset-cpus", cpuset,
                 "--memory", mem_str,
                 "docker.dragonflydb.io/dragonflydb/dragonfly:latest",
                 "--port", "6379",
@@ -227,7 +227,7 @@ def get_targets(cores, mem_gb):
                 "--name", "redis_bench",
                 "--security-opt", "seccomp=unconfined",
                 "--network", "host",
-                "--cpus", str(cores),
+                "--cpuset-cpus", "0",
                 "--memory", mem_str,
                 "redis:7-alpine",
                 "redis-server",
@@ -237,7 +237,7 @@ def get_targets(cores, mem_gb):
                 "--maxmemory", f"{db_mem_mb}mb",
                 "--protected-mode", "no"
             ],
-            "arch": "epoll Single-Threaded (C11, io-threads=1)"
+            "arch": "epoll Single-Threaded (C11, io-threads=1, Core 0)"
         },
         {
             "id": "redis_tuned",
@@ -248,7 +248,7 @@ def get_targets(cores, mem_gb):
                 "--name", "redis_tuned_bench",
                 "--security-opt", "seccomp=unconfined",
                 "--network", "host",
-                "--cpus", str(cores),
+                "--cpuset-cpus", cpuset,
                 "--memory", mem_str,
                 "redis:7-alpine",
                 "redis-server",
@@ -355,6 +355,10 @@ def run_realistic_tier_suite(target, tier_name, cores, cfg):
     for op, m in r5.items():
         print(f"     {op:<12}: {m['rps']:>10.1f} req/s | p50: {m['p50_ms']:>6.3f} ms | p99: {m['p99_ms']:>6.3f} ms", flush=True)
 
+    # Measure intermediate RAM with 100,000 keys loaded
+    keys_100k_stats = get_container_stats(cname)
+    print(f"  -> Intermediate RAM (100k keys active): {keys_100k_stats}", flush=True)
+
     # Workload 6: Realistic Payload Sweep (-r 100000, 256B, 512B, 1KB, 4KB)
     flush_db()
     print(f"  -> redis-benchmark Suite 6: Production Payload Sweep (-r 100000, c=50, n=50000)...", flush=True)
@@ -368,6 +372,10 @@ def run_realistic_tier_suite(target, tier_name, cores, cfg):
         for op, m in res_sz.items():
             print(f"     {op} ({sz}B): {m['rps']:>10.1f} req/s | p50: {m['p50_ms']:>6.3f} ms | p99: {m['p99_ms']:>6.3f} ms", flush=True)
     suites["redis_bench_payload_sweep"] = r6
+
+    # Measure RAM after 4KB payload sweep (high-water mark)
+    payload_sweep_stats = get_container_stats(cname)
+    print(f"  -> RAM after 4KB payload sweep (allocator high-water mark): {payload_sweep_stats}", flush=True)
 
     # Workload 7: High-Throughput Batch Ingestion (P=16, -r 100000, c=100, n=300000)
     flush_db()
@@ -390,6 +398,8 @@ def run_realistic_tier_suite(target, tier_name, cores, cfg):
         "id": target["id"],
         "arch": target["arch"],
         "init_stats": init_stats,
+        "keys_100k_stats": keys_100k_stats,
+        "payload_sweep_stats": payload_sweep_stats,
         "post_stats": post_stats,
         "suites": suites
     }
@@ -413,16 +423,17 @@ def main():
             "tier_key": "tier1_2cpu_4gb",
             "cores": 2,
             "mem_gb": 4,
+            "cpuset": "0,2",
             "config": {
-                "m1_threads": 2,
-                "m1_conns_per_thread": 25,  # 50 conns
-                "m1_reqs": 5000,            # 250,000 requests
-                "m2_threads": 2,
-                "m2_conns_per_thread": 50,  # 100 conns
+                "m1_threads": 4,
+                "m1_conns_per_thread": 25,  # 100 conns total
+                "m1_reqs": 2500,            # 250,000 requests
+                "m2_threads": 4,
+                "m2_conns_per_thread": 25,  # 100 conns total
                 "m2_reqs": 2500,            # 250,000 requests
-                "m3_threads": 2,
-                "m3_conns_per_thread": 25,  # 50 conns
-                "m3_reqs": 5000,            # 250,000 requests
+                "m3_threads": 4,
+                "m3_conns_per_thread": 25,  # 100 conns total
+                "m3_reqs": 2500,            # 250,000 requests
                 "r5_reqs": 100000,
                 "r7_reqs": 300000,
             }
@@ -432,18 +443,19 @@ def main():
             "tier_key": "tier2_4cpu_8gb",
             "cores": 4,
             "mem_gb": 8,
+            "cpuset": "0,2,4,6",
             "config": {
                 "m1_threads": 4,
-                "m1_conns_per_thread": 50,  # 200 conns
-                "m1_reqs": 5000,            # 1,000,000 requests
+                "m1_conns_per_thread": 25,  # 100 conns total (identical to Tier 1 for clean vertical scaling)
+                "m1_reqs": 2500,            # 250,000 requests
                 "m2_threads": 4,
-                "m2_conns_per_thread": 50,  # 200 conns
-                "m2_reqs": 5000,            # 1,000,000 requests
+                "m2_conns_per_thread": 25,  # 100 conns total
+                "m2_reqs": 2500,            # 250,000 requests
                 "m3_threads": 4,
-                "m3_conns_per_thread": 50,  # 200 conns
-                "m3_reqs": 5000,            # 1,000,000 requests
-                "r5_reqs": 150000,
-                "r7_reqs": 500000,
+                "m3_conns_per_thread": 25,  # 100 conns total
+                "m3_reqs": 2500,            # 250,000 requests
+                "r5_reqs": 100000,
+                "r7_reqs": 300000,
             }
         }
     ]
@@ -455,14 +467,15 @@ def main():
         t_key = tier["tier_key"]
         cores = tier["cores"]
         mem_gb = tier["mem_gb"]
+        cpuset = tier["cpuset"]
         cfg = tier["config"]
 
         print("\n" + "#" * 80, flush=True)
         print(f" STARTING: {t_name}", flush=True)
-        print(f" Resource Quota: --cpus {cores} --memory {mem_gb}g", flush=True)
+        print(f" Resource Quota: --cpuset-cpus {cpuset} --memory {mem_gb}g", flush=True)
         print("#" * 80, flush=True)
 
-        targets = get_targets(cores, mem_gb)
+        targets = get_targets(cores, mem_gb, cpuset)
         tier_data = {}
 
         for target in targets:
