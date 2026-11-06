@@ -18,7 +18,7 @@ impl Default for SccIndex {
 impl SccIndex {
     pub fn new() -> Self {
         Self {
-            map: HashMap::with_hasher(RandomState::new()),
+            map: HashMap::with_capacity_and_hasher(131072, RandomState::new()),
             count: AtomicUsize::new(0),
         }
     }

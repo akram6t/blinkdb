@@ -13,6 +13,10 @@ use crate::protocol::binary::handler::BinaryHandler;
 use crate::protocol::resp::handler::RespHandler;
 use crate::protocol::resp::parser::{RespCommand, RespParser};
 use crate::protocol::resp::writer::RespWriter;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+pub static SHARD_CONN_COUNTS: [AtomicUsize; 64] = [const { AtomicUsize::new(0) }; 64];
+pub static SHARD_CMD_COUNTS: [AtomicUsize; 64] = [const { AtomicUsize::new(0) }; 64];
 
 pub struct ShardWorker {
     pub shard_id: usize,
@@ -30,6 +34,7 @@ impl ShardWorker {
         crate::engine::tiering::coordinator::set_local_shard_id(self.shard_id);
 
         let mut rt = monoio::RuntimeBuilder::<monoio::FusionDriver>::new()
+            .with_entries(4096)
             .enable_all()
             .build()
             .expect("Failed to build monoio io_uring runtime");
@@ -82,6 +87,7 @@ impl ShardWorker {
 
             let engine_resp = self.engine.clone();
             let router_resp = self.router.clone();
+            let shard_id = self.shard_id;
 
             // Spawn RESP3 listener task on this core's io_uring ring
             monoio::spawn(async move {
@@ -90,10 +96,11 @@ impl ShardWorker {
                     match resp_listener.accept().await {
                         Ok((stream, _peer_addr)) => {
                             let _ = stream.set_nodelay(true);
+                            SHARD_CONN_COUNTS[shard_id].fetch_add(1, Ordering::Relaxed);
                             let h = handler.clone();
                             let r = router_resp.clone();
                             monoio::spawn(async move {
-                                Self::handle_resp_connection(stream, h, r).await;
+                                Self::handle_resp_connection(shard_id, stream, h, r).await;
                             });
                         }
                         Err(e) => {
@@ -133,6 +140,7 @@ impl ShardWorker {
     }
 
     async fn handle_resp_connection(
+        shard_id: usize,
         mut stream: TcpStream,
         handler: Arc<RespHandler>,
         router: Option<ClusterRouter>,
@@ -188,6 +196,7 @@ impl ShardWorker {
                                 return;
                             }
 
+                            SHARD_CMD_COUNTS[shard_id].fetch_add(1, Ordering::Relaxed);
                             handler.handle_command(cmd, &mut write_buf);
                         }
                         Ok(None) => {
@@ -235,6 +244,7 @@ impl ShardWorker {
                                 return;
                             }
 
+                            SHARD_CMD_COUNTS[shard_id].fetch_add(1, Ordering::Relaxed);
                             handler.handle_command(cmd, &mut write_buf);
                         }
                         Ok(None) => break,

@@ -1,0 +1,42 @@
+{
+  "tier1": {
+    "tier_name": "Tier 1 (2 Cores)",
+    "cores": 2,
+    "cpuset": "0,2",
+    "effective_cpuset": "0,2",
+    "threads": "SPID PSR COMMAND\n 716742   0 rustforge-serve\n 716754   0 rustforge-worke\n 716755   2 rustforge-worke",
+    "suite_3_perf": {
+      "uncore_imc_free_running/data_read/": 13270.23,
+      "uncore_imc_free_running/data_write/": 2185.65,
+      "uncore_imc_free_running/data_total/": 15455.9,
+      "seconds": 7873708
+    },
+    "suite_5_perf": {
+      "uncore_imc_free_running/data_read/": 15779.58,
+      "uncore_imc_free_running/data_write/": 2818.71,
+      "uncore_imc_free_running/data_total/": 18598.79,
+      "seconds": 8450001
+    },
+    "c2c_report": ""
+  },
+  "tier2": {
+    "tier_name": "Tier 2 (4 Cores)",
+    "cores": 4,
+    "cpuset": "0,2,4,6",
+    "effective_cpuset": "0,2,4,6",
+    "threads": "SPID PSR COMMAND\n 717305   0 rustforge-serve\n 717319   0 rustforge-worke\n 717320   2 rustforge-worke\n 717321   4 rustforge-worke\n 717322   6 rustforge-worke",
+    "suite_3_perf": {
+      "uncore_imc_free_running/data_read/": 12921.12,
+      "uncore_imc_free_running/data_write/": 2261.97,
+      "uncore_imc_free_running/data_total/": 15183.28,
+      "seconds": 7182447
+    },
+    "suite_5_perf": {
+      "uncore_imc_free_running/data_read/": 15423.61,
+      "uncore_imc_free_running/data_write/": 2557.18,
+      "uncore_imc_free_running/data_total/": 17979.53,
+      "seconds": 7196118
+    },
+    "c2c_report": ""
+  }
+}

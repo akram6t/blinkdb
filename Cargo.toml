@@ -15,6 +15,10 @@ path = "src/main.rs"
 name = "rf-bench"
 path = "src/bin/rf-bench.rs"
 
+[[bin]]
+name = "scc-bench"
+path = "src/bin/scc_bench.rs"
+
 [dependencies]
 ahash = "0.8"
 libc = "0.2"

@@ -289,6 +289,23 @@ impl LsmEngine {
     pub fn sstable_count(&self) -> usize {
         self.sstables.read().len()
     }
+
+    pub fn clear(&self) -> std::io::Result<()> {
+        let mut mem = self.memtable.write();
+        *mem = MemTable::new();
+
+        let wal_path = self.dir.join("current.wal");
+        let _ = std::fs::remove_file(&wal_path);
+        let mut wal = self.wal.write();
+        *wal = Wal::open(&wal_path)?;
+
+        let mut ssts = self.sstables.write();
+        for sst in ssts.drain(..) {
+            let path = self.dir.join(format!("{}.sst", sst.file_id));
+            let _ = std::fs::remove_file(&path);
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]

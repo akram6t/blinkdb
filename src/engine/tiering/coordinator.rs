@@ -208,6 +208,7 @@ impl StorageEngine for TieredStorageEngine {
         for b in &self.hot_bytes_approx {
             b.0.store(0, Ordering::Relaxed);
         }
+        let _ = self.cold_engine.clear();
     }
 
     fn stats(&self) -> EngineStats {

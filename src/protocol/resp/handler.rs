@@ -151,7 +151,15 @@ impl RespHandler {
                     # Stats\r\n\
                     total_commands_processed:{}\r\n\
                     keyspace_hits:{}\r\n\
-                    keyspace_misses:{}\r\n",
+                    keyspace_misses:{}\r\n\
+                    shard_0_conns:{}\r\n\
+                    shard_0_cmds:{}\r\n\
+                    shard_1_conns:{}\r\n\
+                    shard_1_cmds:{}\r\n\
+                    shard_2_conns:{}\r\n\
+                    shard_2_cmds:{}\r\n\
+                    shard_3_conns:{}\r\n\
+                    shard_3_cmds:{}\r\n",
                     stats.memory_bytes,
                     stats.hot_keys,
                     stats.cold_keys,
@@ -161,6 +169,14 @@ impl RespHandler {
                     stats.hits + stats.misses,
                     stats.hits,
                     stats.misses,
+                    crate::core::shard::SHARD_CONN_COUNTS[0].load(std::sync::atomic::Ordering::Relaxed),
+                    crate::core::shard::SHARD_CMD_COUNTS[0].load(std::sync::atomic::Ordering::Relaxed),
+                    crate::core::shard::SHARD_CONN_COUNTS[1].load(std::sync::atomic::Ordering::Relaxed),
+                    crate::core::shard::SHARD_CMD_COUNTS[1].load(std::sync::atomic::Ordering::Relaxed),
+                    crate::core::shard::SHARD_CONN_COUNTS[2].load(std::sync::atomic::Ordering::Relaxed),
+                    crate::core::shard::SHARD_CMD_COUNTS[2].load(std::sync::atomic::Ordering::Relaxed),
+                    crate::core::shard::SHARD_CONN_COUNTS[3].load(std::sync::atomic::Ordering::Relaxed),
+                    crate::core::shard::SHARD_CMD_COUNTS[3].load(std::sync::atomic::Ordering::Relaxed),
                 );
                 RespWriter::write_bulk_string(out, info.as_bytes());
             }
