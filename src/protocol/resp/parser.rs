@@ -31,6 +31,9 @@ pub enum RespCommand {
     FlushDb,
     Command,
     Info(Option<Bytes>),
+    Hello {
+        proto: usize,
+    },
     Quit,
     Cluster(Vec<Bytes>),
     Tier(Vec<Bytes>),
@@ -405,6 +408,18 @@ impl RespParser {
             b'F' | b'f' if (p0.len() == 7 && p0.eq_ignore_ascii_case(b"FLUSHDB"))
                 || (p0.len() == 8 && p0.eq_ignore_ascii_case(b"FLUSHALL")) => {
                 Ok(RespCommand::FlushDb)
+            }
+            b'H' | b'h' => {
+                if p0.len() == 5 && p0.eq_ignore_ascii_case(b"HELLO") {
+                    let proto = if parts.len() > 1 {
+                        parse_ascii_usize(parts[1]).unwrap_or(2)
+                    } else {
+                        2
+                    };
+                    Ok(RespCommand::Hello { proto })
+                } else {
+                    Ok(RespCommand::Unknown(Bytes::copy_from_slice(p0)))
+                }
             }
             _ => Ok(RespCommand::Unknown(Bytes::copy_from_slice(p0))),
         }

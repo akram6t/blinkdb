@@ -137,8 +137,8 @@ impl ShardWorker {
         router: Option<ClusterRouter>,
     ) {
         let _ = stream.set_nodelay(true);
-        let mut read_buf = vec![0u8; 16384];
-        let mut accumulated = Vec::with_capacity(32768);
+        let mut read_buf = vec![0u8; 32768];
+        let mut accumulated = Vec::with_capacity(65536);
         let mut write_buf = Vec::with_capacity(65536);
 
         loop {
@@ -270,8 +270,8 @@ impl ShardWorker {
         handler: Arc<BinaryHandler>,
     ) {
         let _ = stream.set_nodelay(true);
-        let mut read_buf = vec![0u8; 16384];
-        let mut accumulated = Vec::with_capacity(32768);
+        let mut read_buf = vec![0u8; 32768];
+        let mut accumulated = Vec::with_capacity(65536);
         let mut write_buf = Vec::with_capacity(65536);
 
         loop {

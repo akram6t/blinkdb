@@ -110,6 +110,27 @@ impl RespHandler {
                 // Standard empty array response for COMMAND DOCS / COMMAND
                 RespWriter::write_array_header(out, 0);
             }
+            RespCommand::Hello { proto } => {
+                if proto >= 3 {
+                    out.extend_from_slice(b"%7\r\n");
+                } else {
+                    out.extend_from_slice(b"*14\r\n");
+                }
+                RespWriter::write_bulk_string(out, b"server");
+                RespWriter::write_bulk_string(out, b"rustforge");
+                RespWriter::write_bulk_string(out, b"version");
+                RespWriter::write_bulk_string(out, b"0.1.0");
+                RespWriter::write_bulk_string(out, b"proto");
+                RespWriter::write_integer(out, proto as i64);
+                RespWriter::write_bulk_string(out, b"id");
+                RespWriter::write_integer(out, 1);
+                RespWriter::write_bulk_string(out, b"mode");
+                RespWriter::write_bulk_string(out, b"standalone");
+                RespWriter::write_bulk_string(out, b"role");
+                RespWriter::write_bulk_string(out, b"master");
+                RespWriter::write_bulk_string(out, b"modules");
+                RespWriter::write_array_header(out, 0);
+            }
             RespCommand::Info(_section) => {
                 let stats = self.engine.stats();
                 let info = format!(

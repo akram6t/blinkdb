@@ -41,16 +41,11 @@ impl TieredStorageEngine {
 
     #[inline]
     fn check_eviction_threshold(&self) {
-        if self.max_hot_bytes > 0 {
-            let current = self.hot_bytes_approx.load(Ordering::Relaxed);
-            if current > self.max_hot_bytes {
-                if self.is_evicting.compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed).is_ok() {
-                    // Evict a bounded batch of keys (max 256) so worker latency never spikes
-                    let target = (self.hot_index.len() / 100).clamp(16, 256);
-                    self.evict_cold(target);
-                    self.is_evicting.store(false, Ordering::Release);
-                }
-            }
+        if self.is_evicting.compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed).is_ok() {
+            // Evict a bounded batch of keys (max 256) so worker latency never spikes
+            let target = (self.hot_index.len() / 100).clamp(16, 256);
+            self.evict_cold(target);
+            self.is_evicting.store(false, Ordering::Release);
         }
     }
 }
@@ -116,6 +111,7 @@ impl StorageEngine for TieredStorageEngine {
         None
     }
 
+    #[inline(always)]
     fn set(&self, key: Bytes, value: Bytes, ttl_ms: Option<u64>) {
         let val_len = value.len();
         let key_len = key.len();
@@ -123,8 +119,11 @@ impl StorageEngine for TieredStorageEngine {
         let entry = ValueEntry::new_hot(value, ttl_ms);
         self.hot_index.insert(key, entry);
 
-        self.hot_bytes_approx.fetch_add(key_len + val_len + 32, Ordering::Relaxed);
-        self.check_eviction_threshold();
+        let delta = key_len + val_len + 32;
+        let prev = self.hot_bytes_approx.fetch_add(delta, Ordering::Relaxed);
+        if self.max_hot_bytes > 0 && (prev + delta) > self.max_hot_bytes {
+            self.check_eviction_threshold();
+        }
     }
 
     fn del(&self, key: &[u8]) -> bool {
