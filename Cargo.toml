@@ -16,6 +16,8 @@ name = "rf-bench"
 path = "src/bin/rf-bench.rs"
 
 [dependencies]
+ahash = "0.8"
+libc = "0.2"
 monoio = { version = "0.2.4", features = ["iouring", "sync", "bytes"] }
 scc = "3.8.8"
 dashmap = "6.1.0"

@@ -1,10 +1,11 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
+use ahash::RandomState;
 use bytes::Bytes;
 use scc::HashMap;
 use crate::engine::{current_time_millis, ValueEntry};
 
 pub struct SccIndex {
-    map: HashMap<Bytes, ValueEntry>,
+    map: HashMap<Bytes, ValueEntry, RandomState>,
     count: AtomicUsize,
 }
 
@@ -17,14 +18,14 @@ impl Default for SccIndex {
 impl SccIndex {
     pub fn new() -> Self {
         Self {
-            map: HashMap::new(),
+            map: HashMap::with_hasher(RandomState::new()),
             count: AtomicUsize::new(0),
         }
     }
 
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            map: HashMap::with_capacity(capacity),
+            map: HashMap::with_capacity_and_hasher(capacity, RandomState::new()),
             count: AtomicUsize::new(0),
         }
     }

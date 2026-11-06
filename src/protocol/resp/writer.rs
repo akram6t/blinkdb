@@ -40,9 +40,12 @@ impl RespWriter {
 
     #[inline(always)]
     pub fn write_bulk_string(buf: &mut Vec<u8>, data: &[u8]) {
-        buf.extend_from_slice(b"$");
         let mut itoa_buf = itoa::Buffer::new();
-        buf.extend_from_slice(itoa_buf.format(data.len()).as_bytes());
+        let len_bytes = itoa_buf.format(data.len()).as_bytes();
+        let needed = 1 + len_bytes.len() + 2 + data.len() + 2;
+        buf.reserve(needed);
+        buf.extend_from_slice(b"$");
+        buf.extend_from_slice(len_bytes);
         buf.extend_from_slice(b"\r\n");
         buf.extend_from_slice(data);
         buf.extend_from_slice(b"\r\n");

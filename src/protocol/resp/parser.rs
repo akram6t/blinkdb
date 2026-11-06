@@ -175,198 +175,238 @@ impl RespParser {
         }
 
         let p0 = parts[0];
+        if p0.is_empty() {
+            return Ok(RespCommand::Unknown(Bytes::new()));
+        }
 
-        // Direct zero-allocation ASCII comparison for the hottest commands
-        if p0.eq_ignore_ascii_case(b"GET") {
-            if parts.len() < 2 {
-                Err("ERR wrong number of arguments for 'get' command".to_string())
-            } else {
-                Ok(RespCommand::Get(Bytes::copy_from_slice(parts[1])))
-            }
-        } else if p0.eq_ignore_ascii_case(b"SET") {
-            if parts.len() < 3 {
-                return Err("ERR wrong number of arguments for 'set' command".to_string());
-            }
-            let key = Bytes::copy_from_slice(parts[1]);
-            let value = Bytes::copy_from_slice(parts[2]);
-            let mut ttl_ms = None;
-            let mut nx = false;
-            let mut xx = false;
-
-            let mut i = 3;
-            while i < parts.len() {
-                let opt = parts[i];
-                if opt.eq_ignore_ascii_case(b"EX") {
-                    if i + 1 >= parts.len() {
-                        return Err("ERR syntax error".to_string());
-                    }
-                    let secs = parse_ascii_usize(parts[i + 1])
-                        .ok_or_else(|| "ERR value is not an integer or out of range".to_string())?;
-                    ttl_ms = Some((secs as u64) * 1000);
-                    i += 2;
-                } else if opt.eq_ignore_ascii_case(b"PX") {
-                    if i + 1 >= parts.len() {
-                        return Err("ERR syntax error".to_string());
-                    }
-                    let ms = parse_ascii_usize(parts[i + 1])
-                        .ok_or_else(|| "ERR value is not an integer or out of range".to_string())?;
-                    ttl_ms = Some(ms as u64);
-                    i += 2;
-                } else if opt.eq_ignore_ascii_case(b"NX") {
-                    nx = true;
-                    i += 1;
-                } else if opt.eq_ignore_ascii_case(b"XX") {
-                    xx = true;
-                    i += 1;
+        // Direct first-byte jump table dispatch for maximum CPU branch predictability
+        match p0[0] {
+            b'G' | b'g' if p0.len() == 3 && p0.eq_ignore_ascii_case(b"GET") => {
+                if parts.len() < 2 {
+                    Err("ERR wrong number of arguments for 'get' command".to_string())
                 } else {
-                    i += 1;
+                    Ok(RespCommand::Get(Bytes::copy_from_slice(parts[1])))
                 }
             }
+            b'S' | b's' if p0.len() == 3 && p0.eq_ignore_ascii_case(b"SET") => {
+                if parts.len() < 3 {
+                    return Err("ERR wrong number of arguments for 'set' command".to_string());
+                }
+                let key = Bytes::copy_from_slice(parts[1]);
+                let value = Bytes::copy_from_slice(parts[2]);
+                let mut ttl_ms = None;
+                let mut nx = false;
+                let mut xx = false;
 
-            Ok(RespCommand::Set {
-                key,
-                value,
-                ttl_ms,
-                nx,
-                xx,
-            })
-        } else if p0.eq_ignore_ascii_case(b"PING") {
-            let arg = if parts.len() > 1 {
-                Some(Bytes::copy_from_slice(parts[1]))
-            } else {
-                None
-            };
-            Ok(RespCommand::Ping(arg))
-        } else if p0.eq_ignore_ascii_case(b"INCR") {
-            if parts.len() < 2 {
-                Err("ERR wrong number of arguments for 'incr' command".to_string())
-            } else {
-                Ok(RespCommand::Incr {
-                    key: Bytes::copy_from_slice(parts[1]),
-                    delta: 1,
-                })
-            }
-        } else if p0.eq_ignore_ascii_case(b"DECR") {
-            if parts.len() < 2 {
-                Err("ERR wrong number of arguments for 'decr' command".to_string())
-            } else {
-                Ok(RespCommand::Incr {
-                    key: Bytes::copy_from_slice(parts[1]),
-                    delta: -1,
-                })
-            }
-        } else if p0.eq_ignore_ascii_case(b"INCRBY") {
-            if parts.len() < 3 {
-                Err("ERR wrong number of arguments for 'incrby' command".to_string())
-            } else {
-                let delta = parse_ascii_i64(parts[2])
-                    .ok_or_else(|| "ERR value is not an integer or out of range".to_string())?;
-                Ok(RespCommand::Incr {
-                    key: Bytes::copy_from_slice(parts[1]),
-                    delta,
-                })
-            }
-        } else if p0.eq_ignore_ascii_case(b"DECRBY") {
-            if parts.len() < 3 {
-                Err("ERR wrong number of arguments for 'decrby' command".to_string())
-            } else {
-                let delta = parse_ascii_i64(parts[2])
-                    .ok_or_else(|| "ERR value is not an integer or out of range".to_string())?;
-                Ok(RespCommand::Incr {
-                    key: Bytes::copy_from_slice(parts[1]),
-                    delta: -delta,
-                })
-            }
-        } else if p0.eq_ignore_ascii_case(b"DEL") {
-            if parts.len() < 2 {
-                Err("ERR wrong number of arguments for 'del' command".to_string())
-            } else {
-                let keys = parts[1..].iter().map(|p| Bytes::copy_from_slice(p)).collect();
-                Ok(RespCommand::Del(keys))
-            }
-        } else if p0.eq_ignore_ascii_case(b"EXISTS") {
-            if parts.len() < 2 {
-                Err("ERR wrong number of arguments for 'exists' command".to_string())
-            } else {
-                let keys = parts[1..].iter().map(|p| Bytes::copy_from_slice(p)).collect();
-                Ok(RespCommand::Exists(keys))
-            }
-        } else if p0.eq_ignore_ascii_case(b"MGET") {
-            if parts.len() < 2 {
-                Err("ERR wrong number of arguments for 'mget' command".to_string())
-            } else {
-                let keys = parts[1..].iter().map(|p| Bytes::copy_from_slice(p)).collect();
-                Ok(RespCommand::MGet(keys))
-            }
-        } else if p0.eq_ignore_ascii_case(b"MSET") {
-            if parts.len() < 3 || (parts.len() - 1) % 2 != 0 {
-                Err("ERR wrong number of arguments for 'mset' command".to_string())
-            } else {
-                let mut pairs = Vec::with_capacity((parts.len() - 1) / 2);
-                for chunk in parts[1..].chunks(2) {
-                    pairs.push((Bytes::copy_from_slice(chunk[0]), Bytes::copy_from_slice(chunk[1])));
+                let mut i = 3;
+                while i < parts.len() {
+                    let opt = parts[i];
+                    if opt.eq_ignore_ascii_case(b"EX") {
+                        if i + 1 >= parts.len() {
+                            return Err("ERR syntax error".to_string());
+                        }
+                        let secs = parse_ascii_usize(parts[i + 1])
+                            .ok_or_else(|| "ERR value is not an integer or out of range".to_string())?;
+                        ttl_ms = Some((secs as u64) * 1000);
+                        i += 2;
+                    } else if opt.eq_ignore_ascii_case(b"PX") {
+                        if i + 1 >= parts.len() {
+                            return Err("ERR syntax error".to_string());
+                        }
+                        let ms = parse_ascii_usize(parts[i + 1])
+                            .ok_or_else(|| "ERR value is not an integer or out of range".to_string())?;
+                        ttl_ms = Some(ms as u64);
+                        i += 2;
+                    } else if opt.eq_ignore_ascii_case(b"NX") {
+                        nx = true;
+                        i += 1;
+                    } else if opt.eq_ignore_ascii_case(b"XX") {
+                        xx = true;
+                        i += 1;
+                    } else {
+                        i += 1;
+                    }
                 }
-                Ok(RespCommand::MSet(pairs))
-            }
-        } else if p0.eq_ignore_ascii_case(b"TTL") {
-            if parts.len() < 2 {
-                Err("ERR wrong number of arguments for 'ttl' command".to_string())
-            } else {
-                Ok(RespCommand::Ttl(Bytes::copy_from_slice(parts[1])))
-            }
-        } else if p0.eq_ignore_ascii_case(b"PTTL") {
-            if parts.len() < 2 {
-                Err("ERR wrong number of arguments for 'pttl' command".to_string())
-            } else {
-                Ok(RespCommand::Pttl(Bytes::copy_from_slice(parts[1])))
-            }
-        } else if p0.eq_ignore_ascii_case(b"EXPIRE") {
-            if parts.len() < 3 {
-                Err("ERR wrong number of arguments for 'expire' command".to_string())
-            } else {
-                let seconds = parse_ascii_usize(parts[2])
-                    .ok_or_else(|| "ERR value is not an integer or out of range".to_string())? as u64;
-                Ok(RespCommand::Expire {
-                    key: Bytes::copy_from_slice(parts[1]),
-                    seconds,
+
+                Ok(RespCommand::Set {
+                    key,
+                    value,
+                    ttl_ms,
+                    nx,
+                    xx,
                 })
             }
-        } else if p0.eq_ignore_ascii_case(b"ECHO") {
-            if parts.len() < 2 {
-                Err("ERR wrong number of arguments for 'echo' command".to_string())
-            } else {
-                Ok(RespCommand::Echo(Bytes::copy_from_slice(parts[1])))
+            b'P' | b'p' => {
+                if p0.len() == 4 && p0.eq_ignore_ascii_case(b"PING") {
+                    let arg = if parts.len() > 1 {
+                        Some(Bytes::copy_from_slice(parts[1]))
+                    } else {
+                        None
+                    };
+                    Ok(RespCommand::Ping(arg))
+                } else if p0.len() == 4 && p0.eq_ignore_ascii_case(b"PTTL") {
+                    if parts.len() < 2 {
+                        Err("ERR wrong number of arguments for 'pttl' command".to_string())
+                    } else {
+                        Ok(RespCommand::Pttl(Bytes::copy_from_slice(parts[1])))
+                    }
+                } else {
+                    Ok(RespCommand::Unknown(Bytes::copy_from_slice(p0)))
+                }
             }
-        } else if p0.eq_ignore_ascii_case(b"DBSIZE") {
-            Ok(RespCommand::DbSize)
-        } else if p0.eq_ignore_ascii_case(b"FLUSHDB") || p0.eq_ignore_ascii_case(b"FLUSHALL") {
-            Ok(RespCommand::FlushDb)
-        } else if p0.eq_ignore_ascii_case(b"COMMAND") {
-            Ok(RespCommand::Command)
-        } else if p0.eq_ignore_ascii_case(b"INFO") {
-            let section = if parts.len() > 1 {
-                Some(Bytes::copy_from_slice(parts[1]))
-            } else {
-                None
-            };
-            Ok(RespCommand::Info(section))
-        } else if p0.eq_ignore_ascii_case(b"QUIT") {
-            Ok(RespCommand::Quit)
-        } else if p0.eq_ignore_ascii_case(b"CONFIG") {
-            let args = parts[1..].iter().map(|p| Bytes::copy_from_slice(p)).collect();
-            Ok(RespCommand::Config(args))
-        } else if p0.eq_ignore_ascii_case(b"CLIENT") {
-            Ok(RespCommand::Client)
-        } else if p0.eq_ignore_ascii_case(b"AUTH") {
-            Ok(RespCommand::Auth)
-        } else if p0.eq_ignore_ascii_case(b"TIER") {
-            let args = parts[1..].iter().map(|p| Bytes::copy_from_slice(p)).collect();
-            Ok(RespCommand::Tier(args))
-        } else if p0.eq_ignore_ascii_case(b"CLUSTER") {
-            let args = parts[1..].iter().map(|p| Bytes::copy_from_slice(p)).collect();
-            Ok(RespCommand::Cluster(args))
-        } else {
-            Ok(RespCommand::Unknown(Bytes::copy_from_slice(p0)))
+            b'I' | b'i' => {
+                if p0.len() == 4 && p0.eq_ignore_ascii_case(b"INCR") {
+                    if parts.len() < 2 {
+                        Err("ERR wrong number of arguments for 'incr' command".to_string())
+                    } else {
+                        Ok(RespCommand::Incr {
+                            key: Bytes::copy_from_slice(parts[1]),
+                            delta: 1,
+                        })
+                    }
+                } else if p0.len() == 6 && p0.eq_ignore_ascii_case(b"INCRBY") {
+                    if parts.len() < 3 {
+                        Err("ERR wrong number of arguments for 'incrby' command".to_string())
+                    } else {
+                        let delta = parse_ascii_i64(parts[2])
+                            .ok_or_else(|| "ERR value is not an integer or out of range".to_string())?;
+                        Ok(RespCommand::Incr {
+                            key: Bytes::copy_from_slice(parts[1]),
+                            delta,
+                        })
+                    }
+                } else if p0.len() == 4 && p0.eq_ignore_ascii_case(b"INFO") {
+                    let section = if parts.len() > 1 {
+                        Some(Bytes::copy_from_slice(parts[1]))
+                    } else {
+                        None
+                    };
+                    Ok(RespCommand::Info(section))
+                } else {
+                    Ok(RespCommand::Unknown(Bytes::copy_from_slice(p0)))
+                }
+            }
+            b'D' | b'd' => {
+                if p0.len() == 3 && p0.eq_ignore_ascii_case(b"DEL") {
+                    if parts.len() < 2 {
+                        Err("ERR wrong number of arguments for 'del' command".to_string())
+                    } else {
+                        let keys = parts[1..].iter().map(|p| Bytes::copy_from_slice(p)).collect();
+                        Ok(RespCommand::Del(keys))
+                    }
+                } else if p0.len() == 4 && p0.eq_ignore_ascii_case(b"DECR") {
+                    if parts.len() < 2 {
+                        Err("ERR wrong number of arguments for 'decr' command".to_string())
+                    } else {
+                        Ok(RespCommand::Incr {
+                            key: Bytes::copy_from_slice(parts[1]),
+                            delta: -1,
+                        })
+                    }
+                } else if p0.len() == 6 && p0.eq_ignore_ascii_case(b"DECRBY") {
+                    if parts.len() < 3 {
+                        Err("ERR wrong number of arguments for 'decrby' command".to_string())
+                    } else {
+                        let delta = parse_ascii_i64(parts[2])
+                            .ok_or_else(|| "ERR value is not an integer or out of range".to_string())?;
+                        Ok(RespCommand::Incr {
+                            key: Bytes::copy_from_slice(parts[1]),
+                            delta: -delta,
+                        })
+                    }
+                } else if p0.len() == 6 && p0.eq_ignore_ascii_case(b"DBSIZE") {
+                    Ok(RespCommand::DbSize)
+                } else {
+                    Ok(RespCommand::Unknown(Bytes::copy_from_slice(p0)))
+                }
+            }
+            b'E' | b'e' => {
+                if p0.len() == 6 && p0.eq_ignore_ascii_case(b"EXISTS") {
+                    if parts.len() < 2 {
+                        Err("ERR wrong number of arguments for 'exists' command".to_string())
+                    } else {
+                        let keys = parts[1..].iter().map(|p| Bytes::copy_from_slice(p)).collect();
+                        Ok(RespCommand::Exists(keys))
+                    }
+                } else if p0.len() == 6 && p0.eq_ignore_ascii_case(b"EXPIRE") {
+                    if parts.len() < 3 {
+                        Err("ERR wrong number of arguments for 'expire' command".to_string())
+                    } else {
+                        let seconds = parse_ascii_usize(parts[2])
+                            .ok_or_else(|| "ERR value is not an integer or out of range".to_string())? as u64;
+                        Ok(RespCommand::Expire {
+                            key: Bytes::copy_from_slice(parts[1]),
+                            seconds,
+                        })
+                    }
+                } else if p0.len() == 4 && p0.eq_ignore_ascii_case(b"ECHO") {
+                    if parts.len() < 2 {
+                        Err("ERR wrong number of arguments for 'echo' command".to_string())
+                    } else {
+                        Ok(RespCommand::Echo(Bytes::copy_from_slice(parts[1])))
+                    }
+                } else {
+                    Ok(RespCommand::Unknown(Bytes::copy_from_slice(p0)))
+                }
+            }
+            b'M' | b'm' => {
+                if p0.len() == 4 && p0.eq_ignore_ascii_case(b"MGET") {
+                    if parts.len() < 2 {
+                        Err("ERR wrong number of arguments for 'mget' command".to_string())
+                    } else {
+                        let keys = parts[1..].iter().map(|p| Bytes::copy_from_slice(p)).collect();
+                        Ok(RespCommand::MGet(keys))
+                    }
+                } else if p0.len() == 4 && p0.eq_ignore_ascii_case(b"MSET") {
+                    if parts.len() < 3 || (parts.len() - 1) % 2 != 0 {
+                        Err("ERR wrong number of arguments for 'mset' command".to_string())
+                    } else {
+                        let mut pairs = Vec::with_capacity((parts.len() - 1) / 2);
+                        for chunk in parts[1..].chunks(2) {
+                            pairs.push((Bytes::copy_from_slice(chunk[0]), Bytes::copy_from_slice(chunk[1])));
+                        }
+                        Ok(RespCommand::MSet(pairs))
+                    }
+                } else {
+                    Ok(RespCommand::Unknown(Bytes::copy_from_slice(p0)))
+                }
+            }
+            b'T' | b't' => {
+                if p0.len() == 3 && p0.eq_ignore_ascii_case(b"TTL") {
+                    if parts.len() < 2 {
+                        Err("ERR wrong number of arguments for 'ttl' command".to_string())
+                    } else {
+                        Ok(RespCommand::Ttl(Bytes::copy_from_slice(parts[1])))
+                    }
+                } else if p0.len() == 4 && p0.eq_ignore_ascii_case(b"TIER") {
+                    let args = parts[1..].iter().map(|p| Bytes::copy_from_slice(p)).collect();
+                    Ok(RespCommand::Tier(args))
+                } else {
+                    Ok(RespCommand::Unknown(Bytes::copy_from_slice(p0)))
+                }
+            }
+            b'C' | b'c' => {
+                if p0.len() == 6 && p0.eq_ignore_ascii_case(b"CONFIG") {
+                    let args = parts[1..].iter().map(|p| Bytes::copy_from_slice(p)).collect();
+                    Ok(RespCommand::Config(args))
+                } else if p0.len() == 6 && p0.eq_ignore_ascii_case(b"CLIENT") {
+                    Ok(RespCommand::Client)
+                } else if p0.len() == 7 && p0.eq_ignore_ascii_case(b"CLUSTER") {
+                    let args = parts[1..].iter().map(|p| Bytes::copy_from_slice(p)).collect();
+                    Ok(RespCommand::Cluster(args))
+                } else if p0.len() == 7 && p0.eq_ignore_ascii_case(b"COMMAND") {
+                    Ok(RespCommand::Command)
+                } else {
+                    Ok(RespCommand::Unknown(Bytes::copy_from_slice(p0)))
+                }
+            }
+            b'Q' | b'q' if p0.len() == 4 && p0.eq_ignore_ascii_case(b"QUIT") => Ok(RespCommand::Quit),
+            b'A' | b'a' if p0.len() == 4 && p0.eq_ignore_ascii_case(b"AUTH") => Ok(RespCommand::Auth),
+            b'F' | b'f' if (p0.len() == 7 && p0.eq_ignore_ascii_case(b"FLUSHDB"))
+                || (p0.len() == 8 && p0.eq_ignore_ascii_case(b"FLUSHALL")) => {
+                Ok(RespCommand::FlushDb)
+            }
+            _ => Ok(RespCommand::Unknown(Bytes::copy_from_slice(p0))),
         }
     }
 }

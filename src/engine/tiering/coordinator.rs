@@ -1,5 +1,5 @@
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use bytes::Bytes;
 
@@ -14,6 +14,7 @@ pub struct TieredStorageEngine {
     cold_engine: Arc<LsmEngine>,
     max_hot_bytes: usize,
     hot_bytes_approx: AtomicUsize,
+    is_evicting: AtomicBool,
     hits: AtomicU64,
     misses: AtomicU64,
     evictions: AtomicU64,
@@ -30,6 +31,7 @@ impl TieredStorageEngine {
             cold_engine: cold,
             max_hot_bytes,
             hot_bytes_approx: AtomicUsize::new(0),
+            is_evicting: AtomicBool::new(false),
             hits: AtomicU64::new(0),
             misses: AtomicU64::new(0),
             evictions: AtomicU64::new(0),
@@ -42,9 +44,12 @@ impl TieredStorageEngine {
         if self.max_hot_bytes > 0 {
             let current = self.hot_bytes_approx.load(Ordering::Relaxed);
             if current > self.max_hot_bytes {
-                // Trigger background eviction of 10% of keys
-                let target = (self.hot_index.len() / 10).max(16);
-                self.evict_cold(target);
+                if self.is_evicting.compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed).is_ok() {
+                    // Evict a bounded batch of keys (max 256) so worker latency never spikes
+                    let target = (self.hot_index.len() / 100).clamp(16, 256);
+                    self.evict_cold(target);
+                    self.is_evicting.store(false, Ordering::Release);
+                }
             }
         }
     }
