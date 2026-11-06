@@ -1,4 +1,4 @@
-# RustForge ⚡
+# BlinkDB ⚡
 
 <p align="center">
   <b>A Linux-Native, Thread-Per-Core, Tiered In-Memory Database in Rust</b><br>
@@ -9,19 +9,20 @@
   <img src="https://img.shields.io/badge/Language-Rust%201.80+-orange.svg" alt="Rust 1.80+">
   <img src="https://img.shields.io/badge/Kernel-Linux%206.0+-blue.svg" alt="Linux Kernel 6.0+">
   <img src="https://img.shields.io/badge/I%2FO-io__uring-brightgreen.svg" alt="io_uring">
-  <img src="https://img.shields.io/badge/Protocol-RESP3%20%7C%20RFBP-purple.svg" alt="RESP3 & RFBP">
+  <img src="https://img.shields.io/badge/Protocol-RESP3%20%7C%20Binary-purple.svg" alt="RESP3 & Binary">
+  <img src="https://img.shields.io/badge/Docker-akram6t%2Fblinkdb-blue.svg" alt="Docker">
   <img src="https://img.shields.io/badge/License-MIT%20%2F%20Apache--2.0-blue.svg" alt="License">
 </p>
 
 ---
 
-## 🚀 What is RustForge?
+## 🚀 What is BlinkDB?
 
-**RustForge** is a production-grade, distributed in-memory key-value database built from scratch in Rust. It utilizes modern Linux kernel primitives (`io_uring`, `SO_REUSEPORT`, and thread-per-core core affinity) to deliver multi-million queries-per-second (QPS) performance while transparently tiering cold keys to NVMe disk via an embedded LSM-Tree engine.
+**BlinkDB** is a production-grade, distributed in-memory key-value database built from scratch in Rust. It utilizes modern Linux kernel primitives (`io_uring`, `SO_REUSEPORT`, and thread-per-core core affinity) to deliver multi-million queries-per-second (QPS) performance while transparently tiering cold keys to NVMe disk via an embedded LSM-Tree engine.
 
-RustForge serves two wire protocols concurrently:
+BlinkDB serves two wire protocols concurrently:
 1. **Port 6379 (RESP3 / RESP2)**: Full compatibility with all standard Redis clients (`redis-py`, `ioredis`, `go-redis`, `redis-rs`, `redis-cli`, `memtier_benchmark`).
-2. **Port 7379 (RustForge Native Binary Protocol - RFBP)**: Zero-copy, length-prefixed, 20-byte packed header binary protocol for high-throughput internal microservices.
+2. **Port 7379 (BlinkDB Native Binary Protocol)**: Zero-copy, length-prefixed, 20-byte packed header binary protocol for high-throughput internal microservices.
 
 ---
 
@@ -29,7 +30,7 @@ RustForge serves two wire protocols concurrently:
 
 Verified under official Redis benchmarking tools (`redislabs/memtier_benchmark` and `redis-benchmark`) under strict Docker 4 CPU core / 8 GB RAM constraints against DragonflyDB and Redis 7:
 
-| Workload Dimension | RustForge (io_uring) | DragonflyDB (Proactor) | Redis 7 (Default) | RustForge Advantage |
+| Workload Dimension | BlinkDB (io_uring) | DragonflyDB (Proactor) | Redis 7 (Default) | BlinkDB Advantage |
 | :--- | :---: | :---: | :---: | :---: |
 | **Client Pool Pipelining ($P=4$)** | **843,766 ops/s** | 665,764 ops/s | 353,443 ops/s | **+26.7% vs DF** (+138.7% vs Redis) |
 | **Batch Ingestion ($P=16$, GET)** | **1,041,667 ops/s** | 454,545 ops/s | 403,226 ops/s | **+129.2% vs DF (2.29x)** |
@@ -37,7 +38,7 @@ Verified under official Redis benchmarking tools (`redislabs/memtier_benchmark` 
 | **Extreme Concurrency ($c=496$)** | **320,879 ops/s** | 267,665 ops/s | 103,219 ops/s | **+19.9% vs DF** (+210.9% vs Redis) |
 | **Payload Sweep (4KB GET)** | **89,286 req/s** | 68,493 req/s | 97,403 req/s | **+30.4% vs DF** |
 
-*For complete benchmarks, hardware PMU profiling, and scaling efficiency metrics, read the [Production Benchmark Report](file:///home/akram/Desktop/rustforge/BENCHMARK_REPORT.md).*
+*For complete benchmarks, hardware PMU profiling, and scaling efficiency metrics, read the [Production Benchmark Report](BENCHMARK_REPORT.md).*
 
 ---
 
@@ -45,7 +46,7 @@ Verified under official Redis benchmarking tools (`redislabs/memtier_benchmark` 
 
 ```
                            Incoming Client Traffic
-                     (Port 6379: RESP3 | Port 7379: RFBP)
+                     (Port 6379: RESP3 | Port 7379: Binary)
                                       │
                ┌──────────────────────┴──────────────────────┐
                │    Linux Kernel 4-Tuple Hash (SO_REUSEPORT) │
@@ -61,7 +62,7 @@ Verified under official Redis benchmarking tools (`redislabs/memtier_benchmark` 
           ├──────────────────────────┤               │
           │ Dual-Stack Connection    │               │
           │ - Port 6379 (RESP3)      │               │
-          │ - Port 7379 (RFBP Binary)│               │
+          │ - Port 7379 (Binary)     │               │
           ├──────────────────────────┤               │
           │  Tiered Storage Engine   │               │
           │  ┌────────────────────┐  │               │
@@ -102,18 +103,18 @@ Verified under official Redis benchmarking tools (`redislabs/memtier_benchmark` 
 
 ### Running with Docker (Recommended)
 ```bash
-# Pull or build the container
-docker build -t rustforge:latest .
+# Pull the official Docker image
+docker pull akram6t/blinkdb:latest
 
 # Run on 4 dedicated cores with 8 GB RAM
 docker run -d \
-  --name rustforge \
+  --name blinkdb \
   --network host \
   --security-opt seccomp=unconfined \
   --cpuset-cpus "0,2,4,6" \
   --memory 8g \
-  -v /tmp/rustforge_data:/data \
-  rustforge:latest \
+  -v /tmp/blinkdb_data:/data \
+  akram6t/blinkdb:latest \
   --threads 4 \
   --resp-port 6379 \
   --max-memory-mb 6144 \
@@ -123,10 +124,12 @@ docker run -d \
 ### Building From Source
 ```bash
 # Prerequisites: Linux 6.0+, Rust 1.80+
+git clone https://github.com/akram6t/blinkdb.git
+cd blinkdb
 cargo build --release
 
 # Run standalone server
-./target/release/rustforge-server \
+./target/release/blinkdb-server \
   --resp-port 6379 \
   --binary-port 7379 \
   --threads 4 \
@@ -150,7 +153,7 @@ redis-cli -p 6379 GET user:101
 
 ## 💻 Client Integration Examples
 
-RustForge works with existing Redis libraries without modifications.
+BlinkDB works with existing Redis libraries without modifications.
 
 ### Python (`redis-py`)
 ```python
@@ -199,7 +202,7 @@ func main() {
 }
 ```
 
-*For more client examples in Rust, Go, Java, and Native Binary Protocol (Port 7379), see the [Client Integration Guide](file:///home/akram/Desktop/rustforge/docs/CLIENT_GUIDE.md).*
+*For more client examples in Rust, Go, Java, and Native Binary Protocol (Port 7379), see the [Client Integration Guide](docs/CLIENT_GUIDE.md).*
 
 ---
 
@@ -208,7 +211,7 @@ func main() {
 | Parameter | Default | Description |
 | :--- | :---: | :--- |
 | `-p, --resp-port <PORT>` | `6379` | Port for Redis RESP3 / RESP2 client connections |
-| `-b, --binary-port <PORT>` | `7379` | Port for Native Binary Protocol (RFBP) |
+| `-b, --binary-port <PORT>` | `7379` | Port for Native Binary Protocol |
 | `-t, --threads <COUNT>` | `0` | Worker shards (0 = auto-detect all physical cores) |
 | `-d, --data-dir <PATH>` | `./data` | Filesystem path for cold LSM-tree storage and WAL |
 | `-m, --max-memory-mb <MB>` | `1024` | Hot RAM threshold before cold tiering / eviction |
@@ -219,10 +222,10 @@ func main() {
 
 ## 📖 Detailed Documentation
 
-- 📘 [Installation, Configuration & Systemd Operations Guide](file:///home/akram/Desktop/rustforge/docs/INSTALLATION_AND_USAGE.md)
-- 📗 [Client Integration Guide (Python, Node.js, Go, Rust, RFBP Binary)](file:///home/akram/Desktop/rustforge/docs/CLIENT_GUIDE.md)
-- 📊 [Production 3-Way Benchmark Report & Scaling Analysis](file:///home/akram/Desktop/rustforge/BENCHMARK_REPORT.md)
-- 🔬 [Tier 2 Scaling Diagnostics & PMU Profiling Report](file:///home/akram/Desktop/rustforge/docs/diagnostics_tier2_regression.md)
+- 📘 [Installation, Configuration & Systemd Operations Guide](docs/INSTALLATION_AND_USAGE.md)
+- 📗 [Client Integration Guide (Python, Node.js, Go, Rust, Binary Protocol)](docs/CLIENT_GUIDE.md)
+- 📊 [Production 3-Way Benchmark Report & Scaling Analysis](BENCHMARK_REPORT.md)
+- 🔬 [Tier 2 Scaling Diagnostics & PMU Profiling Report](docs/diagnostics_tier2_regression.md)
 
 ---
 

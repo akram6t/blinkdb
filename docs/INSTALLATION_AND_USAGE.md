@@ -1,6 +1,6 @@
-# RustForge: Installation, Configuration & Production Operations Guide
+# BlinkDB: Installation, Configuration & Production Operations Guide
 
-This guide provides end-to-end instructions for installing, configuring, deploying, and maintaining **RustForge** in production environments.
+This guide provides end-to-end instructions for installing, configuring, deploying, and maintaining **BlinkDB** in production environments.
 
 ---
 
@@ -21,7 +21,7 @@ This guide provides end-to-end instructions for installing, configuring, deployi
 
 ## 1. System Prerequisites & Kernel Requirements
 
-RustForge is architected specifically for high-throughput Linux environments utilizing modern kernel primitives:
+BlinkDB is architected specifically for high-throughput Linux environments utilizing modern kernel primitives:
 
 | Component | Minimum Requirement | Recommended Production Target |
 | :--- | :--- | :--- |
@@ -55,22 +55,22 @@ The official Docker image packages the release binary with `mimalloc` and minima
 
 #### 1. Build the Docker Image Locally:
 ```bash
-git clone https://github.com/your-org/rustforge.git
-cd rustforge
-docker build -t rustforge:latest -f Dockerfile .
+git clone https://github.com/akram6t/blinkdb.git
+cd blinkdb
+docker build -t akram6t/blinkdb:latest -f Dockerfile .
 ```
 
-#### 2. Run Standalone RustForge Container:
+#### 2. Run Standalone BlinkDB Container:
 ```bash
 docker run -d \
-  --name rustforge \
+  --name blinkdb \
   --restart always \
   --network host \
   --security-opt seccomp=unconfined \
   --cpuset-cpus "0,2,4,6" \
   --memory 8g \
-  -v /var/lib/rustforge/data:/data \
-  rustforge:latest \
+  -v /var/lib/blinkdb/data:/data \
+  akram6t/blinkdb:latest \
   --threads 4 \
   --resp-port 6379 \
   --binary-port 7379 \
@@ -101,19 +101,19 @@ source $HOME/.cargo/env
 
 #### 2. Clone and Compile Optimized Release Binary:
 ```bash
-git clone https://github.com/your-org/rustforge.git
-cd rustforge
+git clone https://github.com/akram6t/blinkdb.git
+cd blinkdb
 
 # Build with maximum CPU optimizations
 RUSTFLAGS="-C target-cpu=native" cargo build --release
 
 # Binaries will be generated at target/release/
-./target/release/rustforge-server --version
+./target/release/blinkdb-server --version
 ```
 
 #### 3. Install to System Path:
 ```bash
-sudo cp target/release/rustforge-server /usr/local/bin/
+sudo cp target/release/blinkdb-server /usr/local/bin/
 sudo cp target/release/rf-bench /usr/local/bin/
 ```
 
@@ -123,24 +123,24 @@ sudo cp target/release/rf-bench /usr/local/bin/
 
 1. Download the release tarball for your architecture:
 ```bash
-wget https://github.com/your-org/rustforge/releases/latest/download/rustforge-linux-x86_64.tar.gz
-tar -zxvf rustforge-linux-x86_64.tar.gz
-sudo mv rustforge-server /usr/local/bin/
+wget https://github.com/akram6t/blinkdb/releases/latest/download/blinkdb-linux-x86_64.tar.gz
+tar -zxvf blinkdb-linux-x86_64.tar.gz
+sudo mv blinkdb-server /usr/local/bin/
 ```
 2. Verify executable permissions:
 ```bash
-chmod +x /usr/local/bin/rustforge-server
-rustforge-server --help
+chmod +x /usr/local/bin/blinkdb-server
+blinkdb-server --help
 ```
 
 ---
 
 ## 3. Configuration & CLI Parameter Reference
 
-RustForge is configured through command-line parameters or environment overrides.
+BlinkDB is configured through command-line parameters or environment overrides.
 
 ```
-Usage: rustforge-server [OPTIONS]
+Usage: blinkdb-server [OPTIONS]
 
 Options:
   -p, --resp-port <PORT>        Port for RESP3/RESP2 Redis compatibility [default: 6379]
@@ -165,7 +165,7 @@ Options:
 
 For production environments targeting > 1,000,000 ops/sec, apply these kernel parameters:
 
-### 1. Network & Socket Tuning (`/etc/sysctl.d/99-rustforge.conf`):
+### 1. Network & Socket Tuning (`/etc/sysctl.d/99-blinkdb.conf`):
 ```ini
 # Maximum socket receive/send buffers
 net.core.rmem_max = 16777216
@@ -193,7 +193,7 @@ Apply the settings:
 sudo sysctl --system
 ```
 
-### 2. File Descriptor Limits (`/etc/security/limits.d/99-rustforge.conf`):
+### 2. File Descriptor Limits (`/etc/security/limits.d/99-blinkdb.conf`):
 ```ini
 * soft nofile 1048576
 * hard nofile 1048576
@@ -212,30 +212,30 @@ sudo cpufreq-set -r -g performance
 
 ## 5. Systemd Production Service Setup
 
-Create `/etc/systemd/system/rustforge.service`:
+Create `/etc/systemd/system/blinkdb.service`:
 
 ```ini
 [Unit]
-Description=RustForge In-Memory Tiered Database
+Description=BlinkDB In-Memory Tiered Database
 After=network.target network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=rustforge
-Group=rustforge
+User=blinkdb
+Group=blinkdb
 LimitNOFILE=1048576
 LimitMEMLOCK=infinity
 CPUSchedulingPolicy=other
 Nice=-20
 
 # Command Line Execution
-ExecStart=/usr/local/bin/rustforge-server \
+ExecStart=/usr/local/bin/blinkdb-server \
     --resp-port 6379 \
     --binary-port 7379 \
     --threads 4 \
     --max-memory-mb 6144 \
-    --data-dir /var/lib/rustforge/data
+    --data-dir /var/lib/blinkdb/data
 
 Restart=always
 RestartSec=3s
@@ -244,7 +244,7 @@ RestartSec=3s
 ProtectSystem=full
 ProtectHome=true
 NoNewPrivileges=true
-ReadWritePaths=/var/lib/rustforge/data
+ReadWritePaths=/var/lib/blinkdb/data
 
 [Install]
 WantedBy=multi-user.target
@@ -253,27 +253,27 @@ WantedBy=multi-user.target
 Enable and start the service:
 ```bash
 # Create dedicated system user and storage directory
-sudo useradd -r -s /bin/false rustforge
-sudo mkdir -p /var/lib/rustforge/data
-sudo chown -R rustforge:rustforge /var/lib/rustforge
+sudo useradd -r -s /bin/false blinkdb
+sudo mkdir -p /var/lib/blinkdb/data
+sudo chown -R blinkdb:blinkdb /var/lib/blinkdb
 
 # Enable and start
 sudo systemctl daemon-reload
-sudo systemctl enable --now rustforge
-sudo systemctl status rustforge
+sudo systemctl enable --now blinkdb
+sudo systemctl status blinkdb
 ```
 
 ---
 
 ## 6. Cluster Deployment (Raft & Placement Driver)
 
-RustForge features integrated distributed clustering based on the Raft consensus algorithm and a Placement Driver (PD) for slot topology management:
+BlinkDB features integrated distributed clustering based on the Raft consensus algorithm and a Placement Driver (PD) for slot topology management:
 
 ### 3-Node Cluster Example:
 
 #### Node 1 (Host: 10.0.0.1):
 ```bash
-rustforge-server \
+blinkdb-server \
   --resp-port 6379 \
   --binary-port 7379 \
   --threads 4 \
@@ -285,7 +285,7 @@ rustforge-server \
 
 #### Node 2 (Host: 10.0.0.2):
 ```bash
-rustforge-server \
+blinkdb-server \
   --resp-port 6379 \
   --binary-port 7379 \
   --threads 4 \
@@ -297,7 +297,7 @@ rustforge-server \
 
 #### Node 3 (Host: 10.0.0.3):
 ```bash
-rustforge-server \
+blinkdb-server \
   --resp-port 6379 \
   --binary-port 7379 \
   --threads 4 \
@@ -326,7 +326,7 @@ redis-cli -p 6379 INFO
 Sample Output:
 ```ini
 # Server
-rustforge_version:0.1.0
+blinkdb_version:0.1.0
 arch_bits:64
 os:Linux
 io_backend:io_uring
@@ -369,14 +369,14 @@ redis-cli -p 6379 TIER EVICT 500
 
 ### Q1: Server fails to bind port with `Address already in use`
 * **Cause**: Another Redis or Dragonfly instance is already running on port 6379.
-* **Resolution**: Check running processes with `sudo lsof -i :6379` or `sudo ss -tulpn | grep 6379` and terminate or configure RustForge to use `--resp-port 6380`.
+* **Resolution**: Check running processes with `sudo lsof -i :6379` or `sudo ss -tulpn | grep 6379` and terminate or configure BlinkDB to use `--resp-port 6380`.
 
 ### Q2: `io_uring_setup failed: Permission denied` or `Operation not permitted`
 * **Cause**: Container runtime or Linux seccomp profile is intercepting `io_uring` syscalls.
 * **Resolution**: When running in Docker, pass `--security-opt seccomp=unconfined`. In bare-metal, ensure `/proc/sys/kernel/io_uring_disabled` is set to `0`.
 
-### Q3: Why is RustForge memory usage ~40 MB for 100k keys while Redis uses 16 MB?
-* **Explanation**: Redis is a single-threaded in-memory only database using standard `libc` malloc. RustForge is a multi-threaded, thread-per-core engine with:
+### Q3: Why is BlinkDB memory usage ~40 MB for 100k keys while Redis uses 16 MB?
+* **Explanation**: Redis is a single-threaded in-memory only database using standard `libc` malloc. BlinkDB is a multi-threaded, thread-per-core engine with:
   1. High-concurrency `scc::HashMap` bucket structures (~15 MB)
   2. Registered `io_uring` fixed ring submission and completion buffers (~8 MB)
   3. Tiered cold storage LSM MemTables and Bloom filters (~12 MB)

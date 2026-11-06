@@ -1,8 +1,8 @@
-# RustForge Client Integration & Developer Guide
+# BlinkDB Client Integration & Developer Guide
 
-RustForge exposes two high-performance network interfaces:
+BlinkDB exposes two high-performance network interfaces:
 1. **Port 6379 (RESP3 / RESP2 Compatibility)**: Fully compliant with standard Redis client libraries. Works out of the box with any Redis-compatible client without code changes.
-2. **Port 7379 (RustForge Native Binary Protocol - RFBP)**: Length-prefixed 20-byte packed header binary protocol designed for zero-copy deserialization and microsecond latency in performance-critical microservices.
+2. **Port 7379 (BlinkDB Native Binary Protocol - RFBP)**: Length-prefixed 20-byte packed header binary protocol designed for zero-copy deserialization and microsecond latency in performance-critical microservices.
 
 ---
 
@@ -58,7 +58,7 @@ pip install redis
 ```python
 import redis
 
-# Connect to RustForge on Port 6379
+# Connect to BlinkDB on Port 6379
 client = redis.Redis(
     host='127.0.0.1',
     port=6379,
@@ -68,7 +68,7 @@ client = redis.Redis(
 
 # 1. Health check
 assert client.ping() is True
-print("Connected to RustForge!")
+print("Connected to BlinkDB!")
 
 # 2. String operations
 client.set("user:1001", "Alice", ex=3600)  # TTL 1 hour
@@ -116,7 +116,7 @@ const redis = new Redis({
 async function main() {
   // Test connection
   const pong = await redis.ping();
-  console.log("RustForge Ping Response:", pong);
+  console.log("BlinkDB Ping Response:", pong);
 
   // Set with conditional NX (Not Exists)
   await redis.set("session:token:abc", "user_42", "EX", 1800);
@@ -174,7 +174,7 @@ func main() {
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		panic(err)
 	}
-	fmt.Println("Connected to RustForge!")
+	fmt.Println("Connected to BlinkDB!")
 
 	// Set & Get
 	err := rdb.Set(ctx, "device:sensors:temp", "24.5", 10*time.Minute).Err()
@@ -254,7 +254,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## 6. Command Line Usage (`redis-cli`)
 
-You can interact directly with RustForge via standard `redis-cli`:
+You can interact directly with BlinkDB via standard `redis-cli`:
 
 ```bash
 # Connect to default port
@@ -275,7 +275,7 @@ OK
 (integer) 2
 127.0.0.1:6379> INFO
 # Server
-rustforge_version:0.1.0
+blinkdb_version:0.1.0
 ...
 ```
 
@@ -349,7 +349,7 @@ print(f"Binary GET Result: {val.decode()}")
 
 ## 8. Tiering Control Commands (`TIER`)
 
-RustForge automatically offloads cold data to the disk LSM-Tree tier when memory pressure exceeds `--max-memory-mb`. Operators can also manually trigger and inspect tiering:
+BlinkDB automatically offloads cold data to the disk LSM-Tree tier when memory pressure exceeds `--max-memory-mb`. Operators can also manually trigger and inspect tiering:
 
 ### Query Tiering Status:
 ```bash
@@ -369,4 +369,4 @@ Returns:
 ```
 (integer) 1000
 ```
-When an evicted key is accessed via `GET`, RustForge automatically reads the disk block via direct I/O, verifies the checksum, and promotes the value back into the hot memory table.
+When an evicted key is accessed via `GET`, BlinkDB automatically reads the disk block via direct I/O, verifies the checksum, and promotes the value back into the hot memory table.
